@@ -1,0 +1,138 @@
+
+             ( Adapted from Stackworks SL5 COLDSTART for the 8080 )
+
+                              ( COLDSTART FILE )
+
+                             ( 8086 Version 0.0 )
+
+
+( ===================================================================== )
+(                        RAM BASED WITH SYMBOL TABLE			)
+( ===================================================================== )
+                        ROMF @ NOT  ?SYMTAB @ & IFTRUE
+
+
+: COLDS 0 DO       ( INITIALIZE VARIABLES )
+     DUP 2 + @ OVER @ !   4 +
+ LOOP              ( NOW SET SYMTP & SYMPTR ACCORDING TO MEMSIZE )
+  SWAP 6 @ DUP SYMTP !   OVER - DUP SYMPTR !
+  SWAP $BMOVE      ( MOVE THE SYMBOL TABLE )
+  'B RESTART OVER - 2 - SWAP !   RESTART ;
+
+
+                  ( SPECIAL VARIABLE SETTING )
+
+TDP @ DP T!                  ( SET THE DP )
+TCONTEXT @ CONTEXT T!         ( SET CONTEXT )
+TCUR @ CURRENT T!              ( SET CURRENT )
+
+
+
+COLDSTART      ( FIRST INITIALIZE THE STACKS )
+
+	CLD   CS AX MOV   AX DS MOV   AX SS MOV
+        SSIZE STACK # SP MOV    RSIZE RSTACK # BP MOV
+
+	INITDP @ 1+ # BX MOV            BX PUSH
+	TSYMTP @ TSYMPTR @ - # BX MOV   BX PUSH
+	HERE 0B + # BX MOV     	        BX PUSH
+	NVALS # BX MOV                  BX PUSH
+
+	0E9 B, 'B COLDS REL, ( JMP COLDS )   EDOC
+
+
+
+WRITEVARS    WRITESYM    FINISHED
+
+[END-OF-FILE]
+
+                              IFEND
+( ===================================================================== )
+(                RAM BASED WITHOUT SYMBOL TABLE				)
+( ===================================================================== )
+                 ROMF @ NOT ?SYMTAB @ NOT & IFTRUE
+
+: COLDS 0 DO 		( INITIALIZE MEMORY LOCATIONS )
+     DUP 2 + @   OVER @ !       4 +
+ LOOP DROP     'B RESTART OVER - 2 - SWAP !     RESTART ;
+
+TDP @ DP T!		( SET DP )
+
+COLDSTART      ( FIRST INITIALIZE THE STACKS )
+	CLD   CS AX MOV   AX DS MOV   AX SS MOV
+        SSIZE STACK # SP MOV    RSIZE RSTACK # BP MOV
+
+	INITDP @ 1+ # BX MOV            BX PUSH
+	HERE 0B + # BX MOV     	        BX PUSH
+	NVALS # BX MOV                  BX PUSH
+
+	0E9 B, 'B COLDS REL, ( JMP COLDS )   EDOC
+
+WRITEVARS     FINISHED
+
+[END-OF-FILE]
+
+                              IFEND
+( ===================================================================== )
+(                  ROM BASED WITH SYMBOL TABLE				)
+( ===================================================================== )
+                     ROMF @ ?SYMTAB @ & IFTRUE
+
+
+: COLDS 0 DO 		( INITIALIZE MEMORY LOCATIONS )
+     DUP 2 + @   OVER @ !       4 +
+ LOOP DUP   SYMPTR !    + SYMTP !     RESTART ; ( ??? )
+
+
+TCONTEXT @ CONTEXT T!         ( SET CONTEXT )
+TCUR @ CURRENT T!              ( SET CURRENT )
+TVP @ 20 - DP T!		( SET DP TO TVP-20 )
+
+
+COLDSTART      ( FIRST INITIALIZE THE STACKS )
+	CLD   CS AX MOV   AX DS MOV   AX SS MOV
+        SSIZE STACK # SP MOV    RSIZE RSTACK # BP MOV
+
+	INITDP @ 1+ # BX MOV            BX PUSH
+	TSYMTP @ TSYMPTR @ - # BX MOV   BX PUSH
+	HERE 0B + # BX MOV     	        BX PUSH
+	NVALS # BX MOV                  BX PUSH
+
+	0E9 B, 'B COLDS REL, ( JMP COLDS )   EDOC
+
+WRITEVARS     	WRITESYM	FINISHED
+
+[END-OF-FILE]
+
+                              IFEND
+( ===================================================================== )
+(                ROM BASED WITHOUT SYMBOL TABLE				)
+( ===================================================================== )
+                   ROMF @ ?SYMTAB @ NOT & IFTRUE
+
+: COLDS 0 DO 		( INITIALIZE MEMORY LOCATIONS )
+     DUP 2 + @   OVER @ !       4 +
+ LOOP DROP     RESTART ;
+
+
+
+COLDSTART      ( FIRST INITIALIZE THE STACKS )
+	CLD   CS AX MOV   AX DS MOV   AX SS MOV
+        SSIZE STACK # SP MOV    RSIZE RSTACK # BP MOV
+
+	HERE 0B + # BX MOV     	        BX PUSH
+	NVALS # BX MOV                  BX PUSH
+
+	0E9 B, 'B COLDS REL, ( JMP COLDS )   EDOC
+
+WRITEVARS     FINISHED
+
+[END-OF-FILE]
+
+                                    IFEND
+( ===================================================================== )
+( ===================================================================== )
+
+
+
+

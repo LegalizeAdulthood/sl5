@@ -1,0 +1,96 @@
+
+     ( Copyright 1980 The Stackworks.  All rights reserved )
+
+
+
+
+               ( 8080 ASSEMBLER - 8/18/79 - MOB )
+
+
+ASSEMBLER DEFINITIONS              HEX
+
+
+: 8* 8 * ;
+: FORM1 CONSTANT ;: @ B, ;
+: FORM2 CONSTANT ;: @ B, B, ;
+: FORM3 CONSTANT ;: @ B, , ;
+: FORM4 CONSTANT ;: @ + B, ;
+: FORM5 CONSTANT ;: @ SWAP 8* + B, ;
+
+
+0 CONSTANT B        1 CONSTANT C         2 CONSTANT D
+3 CONSTANT E        4 CONSTANT H         5 CONSTANT L
+6 CONSTANT M        7 CONSTANT A
+6 CONSTANT SP       6 CONSTANT PSW
+
+
+
+              ( 8080 INSTRUCTION DEFINITIONS )
+
+37 FORM1 STC          3F FORM1 CMC           0 FORM1 NOP
+2F FORM1 CMA          27 FORM1 DAA          EB FORM1 XCHG
+E3 FORM1 XTHL         F9 FORM1 SPHL         E9 FORM1 PCHL
+FB FORM1 EI           F3 FORM1 DI           76 FORM1 HLT
+C9 FORM1 RET          D8 FORM1 RC           D0 FORM1 RNC
+C8 FORM1 RZ           C0 FORM1 RNZ          F8 FORM1 RM
+F0 FORM1 RP           E8 FORM1 RPE          E0 FORM1 RPO
+07 FORM1 RLC          0F FORM1 RRC          17 FORM1 RAL
+1F FORM1 RAR
+
+DB FORM2 IN           D3 FORM2 OUT          C6 FORM2 ADI
+CE FORM2 ACI          D6 FORM2 SUI          DE FORM2 SBI
+E6 FORM2 ANI          EE FORM2 XRI          F6 FORM2 ORI
+FE FORM2 CPI
+
+32 FORM3 STA          3A FORM3 LDA          22 FORM3 SHLD
+2A FORM3 LHLD         CD FORM3 CALL        0DC FORM3 CC
+D4 FORM3 CNC         0CC FORM3 CZ           C4 FORM3 CNZ
+F4 FORM3 CP           FC FORM3 CM           EC FORM3 CPE
+E4 FORM3 CPO          C3 FORM3 JMP         0DA FORM3 JC
+D2 FORM3 JNC         0CA FORM3 JZ           F2 FORM3 JP
+C2 FORM3 JNZ         0FA FORM3 JM          0EA FORM3 JPE
+E2 FORM3 JPO
+
+80 FORM4 ADD          88 FORM4 ADC          90 FORM4 SUB
+98 FORM4 SBB          A0 FORM4 ANA          A8 FORM4 XRA
+B0 FORM4 ORA          B8 FORM4 CMP
+
+C7 FORM5 RST          05 FORM5 DCR          04 FORM5 INR
+03 FORM5 INX          0B FORM5 DCX          09 FORM5 DAD
+C5 FORM5 PUSH         C1 FORM5 POP          02 FORM5 STAX
+0A FORM5 LDAX
+
+: MVI 8* 6 + B, B, ;
+: LXI 8* 1+ B, , ;
+: MOV 8* + 40 + B, ;
+
+
+
+                  ( ASSEMBLER CONDITIONALS )
+
+: CONDS DUP 1 = IF
+     DROP 0D2
+ ENDIF ;
+
+: IF, CONDS B, HERE DUP , ;
+
+: ELSE, C3 IF,   HERE ROT ! ;
+
+: ENDIF, HERE SWAP ! ;
+
+
+: BEGIN, HERE ;
+
+: END, CONDS B, , ;
+
+: REPEAT, C3 END, ;
+
+ C2 CONSTANT Z        0CA CONSTANT NZ       0DA CONSTANT NC
+0F2 CONSTANT MI       0FA CONSTANT P         E2 CONSTANT PE       
+0EA CONSTANT PO
+
+
+FORTH DEFINITIONS
+
+[END-OF-FILE]
+

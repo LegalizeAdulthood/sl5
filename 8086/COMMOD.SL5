@@ -1,0 +1,47 @@
+
+           ( Copyright 1980 The Stackworks.  All rights reserved )
+
+                            ( COMMOD Version 1.2 )
+                                 ( 3/25/80 )
+
+
+INFOF @    0 INFOF !	      ( TURN OFF ECHO AND REDEF MESSAGE )
+UPPER @    0 UPPER !	      ( set to lower case )
+HEX
+
+
+: USERP ;
+
+'B USERP VARIABLE USERPAD     ( SET USERPAD TO DUMMY INITIALIZATION ROUTINE )
+1 VARIABLE ?SYMTAB     	      ( IF SYMBOL TABLE ISN'T USED, SET ?SYMTAB TO 0 )
+
+
+: COMUP ?SYMTAB @ IF
+     HERE 6 @  SYMTP @ SYMPTR @ -   2DUP -   DUP SYMPTR !    ROT SYMTP !
+      SWAP BMOVE    'B INTRLP GOQIAD !    USERPAD @ GO 
+      FORGET USERP   RESTART 
+     ELSE 'B USERP DP !     USERPAD @ GO    RESTART
+ ENDIF ;
+
+
+: MAKECOM INFILE NAMIT     'B COMUP GOQIAD !    ?SYMTAB @ IF
+     SYMPTR @ HERE SYMTP @ SYMPTR @ - BMOVE    ( MOVE THE SYMBOL TABLE )
+      SYMTP @ SYMPTR @ - HERE + 
+     ELSE HERE 
+ ENDIF  CR C" Program size = "    DUP X.   C" / "   DUP DECIMAL .  HEX
+ INFILE OPENW   100 DO
+     I INFILE BUFAD 80 BMOVE     INFILE WRITE    80
+ +LOOP   INFILE CLOSE  GO-OPSYS ;
+
+
+: INSTR CR CR  
+  T" Set the variable ?SYMTAB to 0 if the symbol table isn't needed."  
+  CR T" Execute 'MAKECOM program.com' when ready"   CR CR  
+  UPPER !       ( RESTORE UPPER )
+  INFOF !	( RESTORE INFOF )
+  [END-OF-FILE] ;
+
+INSTR
+
+
+

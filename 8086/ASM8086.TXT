@@ -1,0 +1,204 @@
+SL5 8086 Assembler
+------------------
+
+
+1. Assembler interface
+
+  CODE <name>   Begin a code definition
+
+  ;CODE         The code equivalent of ;: .  Ends a high-level forth
+                defining sequence and begins a code sequence that will
+                be performed when a child word is executed.  Used in
+                the form:
+
+                  : <name> ... ;CODE ... END-CODE
+
+                At run-time the child's parameter field address is
+                placed on the stack.
+
+  EDOC          End a CODE or ;CODE definition
+
+
+2. Instruction format
+
+As with most Forth assemblers, operands precede the instruction.
+The following examples show SL5 8086 assembler syntax compared with
+conventional Intel notation.
+
+    Intel                                        SL5
+    -----                                        ---
+    CLI                                          CLI
+    IRET                                         IRET
+    REP                                          REP
+    REPNZ                                        REPNZ
+    CS:                                          CS:
+    POP  AX                                  AX  POP
+    PUSH AX                                  AX  PUSH
+    INT  37                                  37  INT
+    IN   AX,23                         23 #  AX  IN
+    IN   AX,DX                           DX  AX  IN
+    OUT  23,AL                         AL  23 #  OUT
+    OUT  DX,AL                           AL  DX  OUT
+    MOV  AX,BX                           BX  AX  MOV
+    CMP  AL,DL                           DL  AL  CMP
+    ROL  AX,1                                AX  ROL
+    ROL  AX,1                            AX  1   ROL
+    ROL  AX,CL                           AX  CL  ROL
+    ROL  CL,1                            CL  1   ROL
+    XCHG [BX],AX                     AX  0 [BX]  XCHG
+    XCHG AX,[BX]                     0 [BX]  AX  XCHG
+    MOV  AL,9                           9 #  AL  MOV
+    MOV  AX,1234                     1234 #  AX  MOV
+    MOV  AX,-1                         -1 #  AX  MOV
+    MOV  BX,AX                           AX  BX  MOV
+    MOV  [2344],AL                   AL  2344 )  MOV
+    MOV  AX,[1234]                   1234 )  AX  MOV
+    MOV  [BX],AL                     AL  0 [BX]  MOV
+    POP  [BX]                            0 [BX]  POP
+    MOV  [BX+9],AX                   AX  9 [BX]  MOV
+    MOV  [BX+SI+9],AX             AX  9 [BX+SI]  MOV
+    JMP  1234                            1234 )  JMP
+    JMP  [1122]                         1122 []  JMP
+    JMP  FAR [4455]                 4455 [] FAR  JMP
+    JMP  5678:1234              1234 5678 ) FAR  JMP
+    JNZ  HERE+5                        HERE 5 +  JNZ
+    JMP  SHORT HERE+5                  HERE 5 +  JU
+    RET                                          RET
+    RETF                                    FAR  RET
+    RET  14                                  14  +RET
+    CMPSB                                  BYTE  CMPS
+    CMPSW                                        CMPS
+    MOVSB                                  BYTE  MOVS
+    MOVSW                                        MOVS
+    SCASB                                  BYTE  SCAS
+    SCASW                                        SCAS
+    LODSB                                  BYTE  LODS
+    LODSW                                        LODS
+    STOSB                                  BYTE  STOS
+    STOSW                                        STOS
+
+
+3. Operands
+
+Operands to instructions may be registers, memory locations or
+immediate values.  When an operand is not a register, it must be
+followed by a symbol to indicate its type:
+
+    #    operand is an immediate number
+    )    operand is a memory location
+    []   operand is an indirect memory location for CALL/JMP
+
+Exceptions are the loop and short jump instructions - these do not
+use  )  after the memory address.
+
+
+4. Data sizes
+
+When the syntax of an instruction does not make it clear, the
+operation is assumed to be 16 bit integer.  Valid overides are:
+
+BYTE ( -- )  Causes the next operation to be 8 bit integer
+
+
+5. Instruction aliases
+
+Several Intel 8086 instructions have alias names.  The table below
+lists the SL5 name and the corresponding Intel alias.
+
+    SL5         Intel            SL5         Intel
+    ---         -----            ---         -----
+
+    JO          -                JPO         JNP
+    JNO         -                JL          JNGE
+    JC  JB      JNAE             JNL         JGE
+    JNC JNB     JAE              JG          JNLE
+    JA          JNBE             JNG         JLE
+    JNA         JBE              JU *        JMP SHORT
+    JZ          JE               LOOPZ       LOOPE
+    JNZ         JNE              LOOPNZ      LOOPNE
+    JS          -                REPZ REP    REPE
+    JNS         -                REPNZ       REPNE
+    JPE         JP               SHL         SAL
+
+*  "Jump Unconditional"
+
+
+6. Register usage
+
+Code words may use any 8086 cpu register except:
+
+    SI           Interpretive Pointer
+    BP           Return Stack Pointer
+    CS DS SS
+
+Segment registers CS DS SS are initialised to the segment used by
+SL5.
+
+If any of these registers is to be used in a code definition for
+other purposes, their content must be saved beforehand and restored
+afterwards.  Register ES is free for use as a scratch register.
+
+
+7. Structured conditionals
+
+Structured conditionals include:
+
+IF,  ELSE,  ENDIF,  BEGIN,  WHILE,  REPEAT,  END,  AGAIN,  AHEAD,
+
+Conditionals that perform a test i.e. IF,  WHILE,  END,  must be
+preceeded by one of the following condition flags:
+
+U>=  U<  0<>  0=  U>  U<=  0>=  0<  >=  <  >  <=  CY  NC  OV  NO
+PO  PE  CXNZ  NEVER
+
+NEVER is used before a conditional test to create an unconditional
+jump.  E.g. AHEAD, and AGAIN, are macros for NEVER IF, and NEVER END,
+respectively.
+
+
+Example using structured conditionals:
+
+    CODE 0= ( n -- flag )
+      BX POP
+      AX AX SUB
+      BX BX OR
+    0= IF,
+      AX INC
+    ENDIF,
+      AX PUSH
+      $NEXT ) JMP
+    END-CODE
+
+
+8. Error messages
+
+"BRANCH OUT OF RANGE"         Exceeded the range of a short relative
+                              branch.
+
+Note: the assembler has limited error checking and it is possible to
+compile code using incorrect modes or operands without any warning
+given.  Take care!
+
+
+9. Compatibility
+
+The SL5 8086 assembler differs from the 8080/Z80 assemblers in the
+following respects:
+
+- Structured conditionals are restricted to short relative branches.
+
+- New structured conditionals  WHILE,  AGAIN,  AHEAD,
+
+- BEGIN, ... REPEAT, (infinite loop) no longer works.  Use
+  BEGIN, ... AGAIN, instead.
+
+- Multiple  WHILE,  is allowed e.g.
+  BEGIN, ... cc WHILE, ... REPEAT,
+  BEGIN, ... cc WHILE, ... cc WHILE ... REPEAT, ... ENDIF,
+
+- $NEXTHL is removed since it has no purpose in the 8086 target.
+
+- Jump to $PUSH causes the value in register AX to be pushed onto
+  the stack.
+
+

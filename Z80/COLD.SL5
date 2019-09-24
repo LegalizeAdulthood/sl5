@@ -1,0 +1,121 @@
+                       ( COLDSTART FILE )
+
+
+( ===================================================================== )
+(                  RAM BASED WITH SYMBOL TABLE				)
+( ===================================================================== )
+                  ROMF @ NOT  ?SYMTAB @ & IFTRUE
+
+
+: COLDS 0 DO       ( INITIALIZE VARIABLES )
+     DUP 2 + @ OVER @ !   4 +
+ LOOP              ( NOW SET SYMTP & SYMPTR ACCORDING TO MEMSIZE )
+  SWAP 6 @ DUP SYMTP !   OVER - DUP SYMPTR !
+  SWAP $BMOVE      ( MOVE THE SYMBOL TABLE )
+  'B RESTART SWAP !   RESTART ;
+
+
+                  ( SPECIAL VARIABLE SETTING )
+
+TDP @ DP T!                  ( SET THE DP )
+TCONTEXT @ CONTEXT T!         ( SET CONTEXT )
+TCUR @ CURRENT T!              ( SET CURRENT )
+
+
+
+COLDSTART      ( FIRST INITIALIZE THE STACKS )
+        SSIZE STACK SP LD      RSIZE RSTACK DE LD       EXX
+
+	INITDP @ HL LD	  HL INC    HL PUSH
+	TSYMTP @ TSYMPTR @ - HL LD    HL PUSH
+	HERE 0B + HL LD    HL PUSH
+	NVALS HL LD    HL PUSH
+
+	'B COLDS JP    EDOC
+
+
+
+WRITEVARS    WRITESYM    FINISHED
+
+[END-OF-FILE]
+
+                              IFEND
+( ===================================================================== )
+(                RAM BASED WITHOUT SYMBOL TABLE				)
+( ===================================================================== )
+                 ROMF @ NOT ?SYMTAB @ NOT & IFTRUE
+
+: COLDS 0 DO 		( INITIALIZE MEMORY LOCATIONS )
+     DUP 2 + @   OVER @ !       4 +
+ LOOP DROP     'B RESTART SWAP !     RESTART ;
+
+TDP @ DP T!		( SET DP )
+
+COLDSTART
+	SSIZE STACK SP LD	RSIZE RSTACK DE LD	EXX
+
+	INITDP @ HL LD     HL INC     HL PUSH
+	HERE 0B + HL LD    HL PUSH     	NVALS HL LD   HL PUSH
+	'B COLDS JP	
+     EDOC
+
+WRITEVARS     FINISHED
+
+[END-OF-FILE]
+
+                              IFEND
+( ===================================================================== )
+(                  ROM BASED WITH SYMBOL TABLE				)
+( ===================================================================== )
+                     ROMF @ ?SYMTAB @ & IFTRUE
+
+
+: COLDS 0 DO 		( INITIALIZE MEMORY LOCATIONS )
+     DUP 2 + @   OVER @ !       4 +
+ LOOP DUP   SYMPTR !    + SYMTP !     RESTART ;
+
+
+TCONTEXT @ CONTEXT T!         ( SET CONTEXT )
+TCUR @ CURRENT T!              ( SET CURRENT )
+TVP @ 20 - DP T!		( SET DP TO TVP-20 )
+
+COLDSTART
+	SSIZE STACK SP LD	RSIZE RSTACK DE LD	EXX
+
+	TSYMTP @ TSYMPTR @ - HL LD     HL PUSH
+	HERE 0B + HL LD    HL PUSH     	NVALS HL LD   HL PUSH
+	'B COLDS JP	
+     EDOC
+
+WRITEVARS     	WRITESYM	FINISHED
+
+[END-OF-FILE]
+
+                              IFEND
+( ===================================================================== )
+(                ROM BASED WITHOUT SYMBOL TABLE				)
+( ===================================================================== )
+                   ROMF @ ?SYMTAB @ NOT & IFTRUE
+
+: COLDS 0 DO 		( INITIALIZE MEMORY LOCATIONS )
+     DUP 2 + @   OVER @ !       4 +
+ LOOP DROP     RESTART ;
+
+
+COLDSTART
+	SSIZE STACK SP LD	RSIZE RSTACK DE LD	EXX
+
+	HERE 0B + HL LD    HL PUSH     	NVALS HL LD   HL PUSH
+	'B COLDS JP	
+     EDOC
+
+WRITEVARS     FINISHED
+
+[END-OF-FILE]
+
+                              IFEND
+( ===================================================================== )
+( ===================================================================== )
+
+
+

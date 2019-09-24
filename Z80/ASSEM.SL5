@@ -1,0 +1,347 @@
+
+     ( Copyright 1980 The Stackworks.  All rights reserved )
+
+
+
+               ( Z80 ASSEMBLER - 8/14/79 - MOB )
+
+ASSEMBLER DEFINITIONS              HEX
+
+: R, BSWAP , ;
+: 2* 2 * ;    : 8* 8 * ;      : 16* 10 * ;
+
+0 VARIABLE PARM
+: ARESET 0 PARM ! ;               
+: SETP PARM @ BSWAP + PARM ! ;
+: PARM2 PARM @X 0FF & ;          
+: PARM1 PARM @ 0FF & ;
+
+: NSETP CONSTANT ;: @ SETP ;
+: 1BYTR CONSTANT ;: B@ B, ;
+: 2BYTR CONSTANT ;: @ R, ;
+
+: IXYP 50 - 16* 2* DD + B, ;
+: IXYP1 PARM1 IXYP ;            : IXYPR2 PARM2 IXYP ;
+
+
+
+( OPPERAND SETTINGS )
+
+ 8 NSETP A      1 NSETP B      2 NSETP C      3 NSETP D
+ 4 NSETP E      5 NSETP H      6 NSETP L
+12 NSETP AF    19 NSETP AF'   13 NSETP BC    14 NSETP DE
+15 NSETP HL    16 NSETP SP    17 NSETP IX    18 NSETP IY
+ 9 NSETP (BC)  10 NSETP (DE)   7 NSETP (HL)
+11 NSETP (SP)  20 NSETP (IX)  21 NSETP (IY)
+30 NSETP NZ    31 NSETP Z     32 NSETP NC    34 NSETP PO
+35 NSETP PE    36 NSETP P     37 NSETP M
+50 NSETP IX+   51 NSETP IY+   60 NSETP ^
+61 NSETP (C)   62 NSETP IR    63 NSETP R
+
+
+
+
+             ( MNEMONICS WOTHOUT ANY OPERANDS )
+
+  D9 1BYTR EXX         27 1BYTR DAA         2F 1BYTR CPL
+  07 1BYTR RLCA        17 1BYTR RLA         0F 1BYTR RRCA
+  1F 1BYTR RRA         76 1BYTR HALT       0F3 1BYTR DI
+ 0FB 1BYTR EI          3F 1BYTR CCF         37 1BYTR SCF
+   0 1BYTR NOP
+
+EDA0 2BYTR LDI       EDB0 2BYTR LDIR      EDA8 2BYTR LDD
+EDB8 2BYTR LDDR      EDA1 2BYTR CPI       EDB1 2BYTR CPIR
+EDA9 2BYTR CPD       EDB9 2BYTR CPDR      ED44 2BYTR NEG
+ED46 2BYTR IM0       ED56 2BYTR IM1       ED5E 2BYTR IM2
+ED6F 2BYTR RLD       ED67 2BYTR RRD       ED4D 2BYTR RETI
+ED45 2BYTR RETN      EDA2 2BYTR INI       EDB2 2BYTR INIR
+EDAA 2BYTR IND       EDBA 2BYTR INDR      EDA3 2BYTR OUTI
+EDB3 2BYTR OTIR      EDAB 2BYTR OUTD      EDBB 2BYTR OTDR
+
+
+
+                    ( BIT OPERATIONS )
+
+: BOP SWAP PARM1 0> IF
+   PARM1 9 < IF
+      CB B, 8* + PARM1 1- + B,
+      ELSE IXYP1 CB B, ROT B, 8* + 6 + B,
+   ENDIF
+ ENDIF ARESET ;
+
+: BIT 40 BOP ;     : RES 80 BOP ;     : SET C0 BOP ;
+                             
+
+
+
+                    ( SHIFT MNEMONICS )
+
+: SOP PARM1 9 < IF
+     CB B, PARM1 1- + B,
+     ELSE IXYP1 CB B, SWAP B, 6 + B,
+ ENDIF ARESET ;
+
+: RLC 0 SOP ;       : RL 10 SOP ;       : RRC 8 SOP ;
+: RR 18 SOP ;       : SLA 20 SOP ;      : SRA 28 SOP ;
+: SRL 38 SOP ;                                
+
+
+
+                  ( ARITHMETIC MNEMONICS )
+
+: AR1 PARM1 9 < PARM1 0> & IF
+     PARM1 1- + 80 + B,
+     ELSE PARM1 IF
+         IXYP1 86 + B, B,
+         ELSE C6 + B, B,
+     ENDIF
+ ENDIF ARESET ;
+
+: AR2 ED B, PARM2 13 - 16* + B, ARESET ;
+
+: SUB 10 AR1 ;    : AND 20 AR1 ;    : OR 30 AR1 ;
+
+: XOR 28 AR1 ;    
+
+: CP 38 AR1 ;
+
+: ADC PARM1 15 = IF
+     4A AR2
+     ELSE 08 AR1
+ ENDIF ;                                         
+
+: SBC PARM1 15 = IF
+     42 AR2
+     ELSE 18 AR1
+ ENDIF ;
+
+: ADD PARM1 17 = PARM1 18 = | IF
+     PARM1 17 - 16* 2* DD + B, PARM1 PARM2 = IF
+         20
+         ELSE PARM2 13 - 16*
+     ENDIF 9 + B,
+     ELSE PARM1 15 = IF
+         PARM2 13 - 16* 9 + B,
+         ELSE 0 AR1
+     ENDIF
+ ENDIF ARESET ;                                            
+
+: DOP PARM1 0 > IF
+      PARM1 9 < IF
+          PARM1 1 - 8* + 4 + B,
+          ELSE PARM1 12 > IF
+              PARM1 17 < IF
+                  8* 3 + PARM1 13 - 16* + B,
+                  ELSE PARM1 17 = IF
+                      8* DD23 + R,
+                      ELSE PARM1 18 = IF
+                          8* FD23 + R,
+                          ELSE IXYP1 34 + B, B,
+                      ENDIF                         
+                  ENDIF
+              ENDIF
+          ENDIF
+      ENDIF
+  ENDIF ARESET ;  
+
+: INC 0 DOP ;        
+
+: DEC 1 DOP ;        
+
+
+
+
+                  ( BRANCHING MNEMONICS )
+
+: CONDS PARM1 2 = IF
+        3
+        ELSE PARM1 30 -
+    ENDIF ;
+
+: CALL PARM1 0= IF
+       CD B,
+       ELSE CONDS 8* C4 + B,
+   ENDIF , ARESET ;
+
+: RET PARM1 0= IF
+      C9 B,
+      ELSE CONDS 8* C0 + B,
+  ENDIF ARESET ;
+
+: RST 8* C7 + , ;
+
+: JP PARM1 7 = IF
+     E9 B,
+     ELSE PARM1 20 = IF
+          DD B, E9 B,
+          ELSE PARM1 21 = IF
+               FD B, E9 B,
+               ELSE PARM1 0 = IF
+                    C3 B, ,
+                    ELSE CONDS 8* C2 + B, ,
+               ENDIF
+          ENDIF
+     ENDIF
+ENDIF ARESET ;
+
+: DJNZ 10 B, B, ARESET ;
+
+: JR PARM1 0= IF
+     18 B, B,
+     ELSE CONDS 8* 20 + B, B,
+ ENDIF ARESET ;
+
+
+
+
+
+
+                        ( IN, OUT )
+
+: IOP PARM1 61 = IF
+      ED B, 1 - ABS PARM2 1 - 8* 40 + + B,
+      ELSE 8* D3 + B, B,
+  ENDIF ARESET ;
+
+: OUT 0 IOP ;       : IN PARM2 PARM1 ARESET SETP SETP 1 IOP ;
+
+
+
+                        ( PUSH, POP )
+
+: STKOP PARM1 DUP 16 < IF
+     DUP 12 = IF
+         4 +
+     ENDIF 13 - 16* C1 + + B,
+     ELSE 17 - 16* 2* DD + B, E1 + B,
+ ENDIF ARESET ;
+
+: PUSH 4 STKOP ;         : POP 0 STKOP ;             
+
+
+
+               ( DATA MANIPULATION MNEMONICS )
+
+: EX PARM1 14 = IF
+     EB B,
+     ELSE PARM1 12 = IF
+         08 B,
+         ELSE PARM2 15 = IF
+             E3 B,
+             ELSE PARM2 17 = IF
+                 DD B, E3 B,
+                 ELSE PARM2 18 = IF
+                     FD B, E3 B,
+                 ENDIF
+             ENDIF
+         ENDIF
+     ENDIF
+ ENDIF ARESET ;
+
+: LD PARM1 9 < IF
+     PARM2 9 < IF
+         PARM2 IF
+             PARM1 1- 8* PARM2 1- + 40 + B,
+             ELSE PARM1 1- 8* 6 + B, B,
+         ENDIF
+         ELSE PARM2 4F > PARM2 52 < & IF
+             IXYPR2 PARM1 1- 8* 46 + B, B,
+             ELSE PARM2 9 = IF
+                 0A B,
+                 ELSE PARM2 10 = IF
+                     1A B,
+                     ELSE PARM2 60 = IF
+                         3A B, ,
+                         ELSE PARM2 62 = IF
+                             ED57 R,                      
+                             ELSE ED5F R,
+                         ENDIF
+                     ENDIF
+                 ENDIF
+             ENDIF
+         ENDIF
+     ENDIF
+     ELSE PARM1 60 = IF
+         PARM2 8 = IF
+             32 B, ,
+             ELSE PARM2 16 > IF
+                 PARM2 39 + IXYP 22 B, ,
+                 ELSE PARM2 15 = IF
+                     22 B, ,
+                     ELSE ED B, PARM2 13 - 8* 2* 43 + B, ,
+                 ENDIF
+    	     ENDIF 
+	 ENDIF                                     
+         ELSE PARM1 62 = IF
+             ED47 R,
+             ELSE PARM1 63 = IF
+                 ED4F R,
+                 ELSE PARM1 9 = IF
+                     02 B,
+                     ELSE PARM1 10 = IF
+                         12 B,
+                         ELSE PARM1 17 < IF
+                             PARM2 IF
+                                 PARM2 60 = IF
+                                     PARM1 15 = IF
+                                         2A B, ,
+                                         ELSE ED B, PARM1 13 - 16* 4B + B, ,
+                                     ENDIF          
+                                     ELSE PARM2 15 = IF
+                                         F9 B,
+                                         ELSE PARM2 39 + IXYP F9 B
+                                     ENDIF
+                                 ENDIF
+                                 ELSE PARM1 13 - 16* 1+ B, ,
+                             ENDIF
+                             ELSE PARM1 19 < IF
+                                 PARM1 39 + IXYP PARM2 IF
+                                     2A
+                                     ELSE 21
+                                 ENDIF B, ,
+                                 ELSE IXYP1 PARM2 IF
+                                     PARM2 1- 70 + B, B, 
+                                     ELSE 36 B, B, B,
+                                 ENDIF
+                             ENDIF
+                         ENDIF
+                     ENDIF
+                 ENDIF
+             ENDIF
+         ENDIF
+     ENDIF
+ ENDIF ARESET ;                                             
+
+
+
+                   ( ASSEMBLER CONDITIONALS )
+
+: LINK, SWAP IF
+     SWAP !
+     ELSE OVER - 1- SWAP B!
+ ENDIF ;
+
+: IF, CONDS 1 X| DUP 4 < IF
+     8* 20 + B, HERE 0 0 B,
+     ELSE 8* C2 + B, HERE 1 0 ,
+ ENDIF ARESET ;
+
+: ELSE, 18 B, 0 B, HERE LINK, HERE 1- 0 ;
+
+: ENDIF, HERE LINK, ;
+
+
+: BEGIN, HERE ;
+
+: END, CONDS 1 X| DUP 4 < IF
+     8* 20 + B, HERE - 1- B,
+     ELSE 8* C2 + B, ,
+ ENDIF ARESET ;
+
+: REPEAT, 18 B, HERE - 1- B, ;
+
+FORTH DEFINITIONS
+
+
+[END-OF-FILE]
+

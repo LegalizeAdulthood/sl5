@@ -1,0 +1,108 @@
+
+     ( Copyright 1980 The Stackworks.  All rights reserved )
+
+
+
+                     ( DEBUGGING UTILITIES )
+
+
+: DASCII 7F & DUP 20 < OVER 7D > | IF
+     DROP 2E
+ ENDIF TCH ;
+
+: DMP 2DUP U> IF
+     2DUP DO
+         I B@ B.
+     LOOP SPACE DO
+         I B@ DASCII
+     LOOP CR
+     ELSE 2DROP
+ ENDIF ;
+
+: DUMP DO
+     I X.   I 10 + I DMP 10
+ +LOOP ;                                      
+
+: HEXD 30 - DUP 9 > IF
+     7 -
+ ENDIF DUP 0 >= OVER 10 < & DUP NOT IF
+     SWAP DROP
+ ENDIF ;
+
+
+
+: MODIFY DUP 1 BEGIN WHILE
+     2DUP = IF
+         CR 10 + SWAP 2DUP DUMP DUP X.
+     ENDIF CIN DUP 1B = IF
+         0
+         ELSE DUP 0D = IF
+             2DROP DUP 1
+             ELSE HEXD IF
+                 4 <-L CIN DUP 1B = IF
+                     DROP 0
+                     ELSE DUP 0D = IF
+                         2DROP DROP DUP
+                         ELSE HEXD IF
+                             | OVER B! 
+                             ELSE DROP 
+                         ENDIF 1+  SPACE
+                     ENDIF 1
+                 ENDIF
+                 ELSE 2 SPACES 1+ 1
+             ENDIF
+         ENDIF
+     ENDIF
+ REPEAT 2DROP DROP CR ;
+
+
+
+                 ( STACK DUMPING ROUTINES )
+
+: SDMP BEGIN
+  2DUP U> WHILE
+      DUP @ X.  DUP @ DUP BSWAP DASCII DASCII   CR   2 +
+ REPEAT 2DROP ;
+
+: PSDMP SSIZE STACK SP@ 2 + SDMP ;
+
+: RSDMP RSIZE RSTACK RP@ 2 + SDMP ;
+
+
+
+                    ( BREAKPOINT WORDS )
+
+0 VARIABLE BREAKAD
+
+: $*BREAK* CR T" BREAK: "   R> DUP @ SYMTP @ + 5 + DUP 1+
+   SWAP B@ TYPE SPACE   2 + DUP X. CR   BREAKAD !   INTRLP ;
+
+: *BREAK* 'B $*BREAK* ,   CURRENT @ @ , ;
+IMP *BREAK*
+
+: *UB* R> R> R> 2DROP DROP    BREAKAD @ >R ;
+
+
+
+                    ( SYM' , SYMDUMP )
+
+: SYMTYPE DUP X. SPACE   DUP 1+ @ DUP X.  SYMTP @ + X.   SPACE
+   SPACE DUP 3 + @ X.   SPACE SPACE DUP B@ B.   SPACE 6 + DUP 1-
+   B@ TYPE CR ;
+
+: SYM' COMPILE 'S   SYMTYPE ;
+
+: SYMDUMP CONTEXT @ BEGIN
+     SYMTP @ + DUP SYMTYPE  DUP 1+ @ 0= IF
+         3 + @ DUP IF
+             @ 0
+             ELSE DROP 1
+         ENDIF
+         ELSE 1+ @ 0
+     ENDIF
+ END ;              
+
+
+
+[END-OF-FILE]
+

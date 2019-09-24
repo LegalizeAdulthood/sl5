@@ -1,0 +1,1215 @@
+
+           ( Copyright 1980 The Stackworks.  All rights reserved )
+
+                        ( 8080 Version 1.2  -  CP/M )
+                                 ( 4/26/80 )
+
+
+
+
+CODE $$PUSH   H PUSH   XCHG   M E MOV   H INX   M D MOV   H INX
+              XCHG   PCHL    EDOC
+
+   
+CODE $CONSTANT   H POP   M C MOV   H INX   M B MOV   B PUSH
+                 $NEXT JMP    EDOC
+
+CODE $BARRAY     H POP   M C MOV   H INX   M B MOV   H POP
+		 B DAD   $PUSH JMP     EDOC
+
+CODE $ARRAY	 H POP   M C MOV   H INX   M B MOV   H POP
+		 H DAD   B DAD   $PUSH JMP    EDOC
+
+
+
+
+( ==================================================================== )
+
+              ( CONDITIONAL COMPILATION CONSTANTS )
+
+	1 XCONSTANT ?FILESYS	( COMPILE FILE SYSTEM SECTION  		)
+	0 XCONSTANT ?OWNIO	( COMPILE USER I/O SECTION     		)
+	1 XCONSTANT ?CRT	( COMPILE CRT I/O WORDS			)
+	1 XCONSTANT ?INTERP	( COMPILE INTERPRETER SECTION  		)
+	1 XCONSTANT ?COMPILE	( COMPILE THE COMPILER SECTION 		)
+
+
+( NOTES:  [1]  CRT SECTION NEEDS OWNIO OR FILESYS			)
+( 	  [2]  INTERPRETER NEEDS CRT SECTION 				)
+(	  [3]  COMPILER NEEDS INTERPRETER TO RUN.			)
+(	  [4]  DO NOT COMPILE BOTH OWNIO AND FILE SYSTEM.		)
+
+( ==================================================================== )
+
+
+
+                ( VARIABLES & CONSTANTS )
+
+   0 VARIABLE DP       		   0 VARIABLE CURRENT    
+   0 VARIABLE CONTEXT              0 VARIABLE CVOC
+6580 VARIABLE SYMTP                0 VARIABLE SYMPTR
+
+   0 VARIABLE RESTARTAD            0 VARIABLE GOQIAD
+   0 VARIABLE D/0AD
+   0 VARIABLE STATE               10 VARIABLE BASE
+   1 VARIABLE UPPER
+  20 VARIABLE DELIMITER
+ 07F VARIABLE INFOF		   0 VARIABLE FLAGS
+   0 VARIABLE DEPTH
+ 100 CONSTANT SSIZE              100 CONSTANT RSIZE
+
+   0 VARIABLE RPTR
+   0 VARIABLE TEMP
+   0 VARIABLE TEMP2
+
+
+                   ( STACKS & BUFFERS )
+
+SSIZE 10 + BARRAY STACK        RSIZE 10 + BARRAY RSTACK
+
+
+
+
+
+CODE LIT   XCHG   M C MOV   H INX   M B MOV   H INX   B PUSH
+           $NEXTHL JMP    EDOC
+   
+CODE $SET   H POP   M C MOV   H INX   M B MOV   H INX   M A MOV
+            B STAX   H INX   B INX   M A MOV   B STAX   $NEXT JMP    EDOC
+   
+CODE $FMAKE   $NEXT JMP    EDOC
+    
+CODE $:   RPTR LHLD   H DCX   D M MOV   H DCX   E M MOV   RPTR SHLD
+          H POP   $NEXTHL JMP    EDOCŠ    
+CODE $;   RPTR LHLD   M E MOV   H INX   M D MOV   H INX   RPTR SHLD
+          $NEXT JMP   EDOC
+
+   
+
+                  ( ARITHMETIC OPERATIONS )
+
+CODE +  H POP  B POP  B DAD  $PUSH JMP    EDOC
+
+CODE -  B POP  H POP  L A MOV  C SUB  A L MOV  H A MOV
+        B SBB  A H MOV  $PUSH JMP    EDOC
+
+CODE |  H POP  B POP  L A MOV  C ORA  A L MOV  H A MOV
+        B ORA  A H MOV  $PUSH JMP    EDOC
+
+CODE &  H POP  B POP  L A MOV  C ANA  A L MOV  H A MOV
+        B ANA  A H MOV  $PUSH JMP     EDOC
+
+CODE X|  H POP  B POP  L A MOV  C XRA  A L MOV  H A MOV
+         B XRA  A H MOV  $PUSH JMP    EDOC
+
+
+CODE 1+  H POP  H INX  $PUSH JMP    EDOC
+
+CODE 1-  H POP  H DCX  $PUSH JMP    EDOC
+
+CODE MINUS  H POP  0 A MVI  L SUB  A L MOV  0 A MVI  H SBB
+            A H MOV  $PUSH JMP    EDOC
+
+
+
+
+
+                    ( MEMORY OPERATIONS )
+
+CODE !  H POP  B POP  C M MOV  H INX  B M MOV  $NEXT JMP    EDOC
+
+CODE @  H POP  M C MOV  H INX  M B MOV  B PUSH  $NEXT JMP    EDOC
+
+CODE B!  H POP  B POP  C M MOV  $NEXT JMP   EDOC
+
+CODE B@  H POP  M L MOV  0 H MVI  $PUSH JMP   EDOC
+
+CODE +!  XCHG  TEMP SHLD  H POP  B POP  M E MOV  H INX
+         M D MOV  XCHG  B DAD  XCHG  D M MOV  H DCX  E M MOV
+         TEMP LHLD  $NEXTHL JMP    EDOC
+
+CODE 1+!   H POP   M C MOV   H INX   M B MOV   B INX   B M MOV
+           H DCX   C M MOV   $NEXT JMP    EDOC
+
+CODE 1-!   H POP   M C MOV   H INX   M B MOV   B DCX   B M MOV
+           H DCX   C M MOV   $NEXT JMP    EDOC
+
+Š
+                   ( STACK MANIPULATIONS )
+
+CODE DUP  H POP  H PUSH  $PUSH JMP    EDOC
+
+CODE DROP  H POP  $NEXT JMP   EDOC
+
+CODE OVER  B POP  H POP  H PUSH  B PUSH  $PUSH JMP    EDOC
+
+CODE SWAP   H POP   XTHL   $PUSH JMP    EDOC
+
+CODE ROT   B POP   H POP   XTHL   B PUSH   $PUSH JMP    EDOC
+
+CODE 2DROP  H POP  B POP  $NEXT JMP    EDOC
+
+CODE 2DUP  H POP  B POP  B PUSH  H PUSH  B PUSH  $PUSH JMP    EDOC
+
+CODE 2SWAP  XCHG  TEMP SHLD  B POP  D POP  H POP  TEMP2 SHLD
+            H POP  D PUSH  B PUSH  H PUSH  TEMP2 LHLD  H PUSH
+            TEMP LHLD  $NEXTHL JMP    EDOC
+
+CODE R>   RPTR LHLD   M C MOV   H INX   M B MOV   H INX
+          RPTR SHLD   B PUSH   $NEXT JMP    EDOC
+
+CODE >R   RPTR LHLD   B POP   H DCX   B M MOV   H DCX   C M MOV
+          RPTR SHLD   $NEXT JMP    EDOC
+
+CODE ROLL   B POP   C A MOV   XCHG   XTHL   XCHG   0 H LXI   SP DAD
+	    H INX   A DCR   NZ IF,
+                BEGIN,
+                    H INX   M C MOV   E M MOV   C E MOV
+                    H INX   M B MOV   D M MOV   B D MOV   A DCR
+                Z END,
+            ENDIF,   H POP   D PUSH   $NEXTHL JMP    EDOC
+
+CODE -ROLL  H POP   XCHG   XTHL   XCHG   L A MOV   0 H MVI   
+	    H DAD   SP DAD   H DCX   A DCR   NZ IF,
+                BEGIN,
+                    M B MOV   D M MOV   H DCX   B D MOV
+                    M C MOV   E M MOV   H DCX   C E MOV   A DCR
+                Z END,
+            ENDIF,   H POP   D PUSH   $NEXTHL JMP    EDOC
+
+
+CODE SP@  0 H LXI  SP DAD  $PUSH JMP    EDOC
+CODE SP!   H POP   SPHL   $NEXT JMP   EDOC
+CODE RP@   RPTR LHLD   $PUSH JMP    EDOC
+CODE RP!   H POP   RPTR SHLD   $NEXT JMP   EDOC
+
+CODE PICK  H POP  H DCX  H DAD  SP DAD  M C MOV  H INX  M B MOV
+           B PUSH  $NEXT JMP    EDOC
+
+
+
+                       ( MISC. WORDS )Š
+: HERE DP @ ;
+: DP+! DP +! ;
+: COUNT DUP 1+ SWAP B@ ;
+
+CODE GO   H POP   PCHL   EDOC
+: GO-OPSYS 0 GO ;
+
+
+CODE BSWAP   H POP   L A MOV   H L MOV   A H MOV   $PUSH JMP    EDOC
+
+CODE $BMOVE   B POP   XCHG   D POP   XTHL   BEGIN,
+                  M A MOV   D STAX   H INX   D INX   B DCX
+                  C A MOV   B ORA
+              Z END,   H POP   $NEXTHL JMP    EDOC
+
+CODE $RMOVE   B POP   XCHG   D POP   XTHL   BEGIN,
+                  M A MOV   D STAX   H DCX   D DCX
+                  B DCX   C A MOV   B ORA
+              Z END,   H POP   $NEXTHL JMP    EDOC
+
+
+CODE ->L   B POP   C A MOV   H POP   A ORA   NZ IF,
+               BEGIN,
+                   A XRA   H A MOV   RAR   A H MOV
+                   L A MOV   RAR   A L MOV   C DCR
+               Z END,
+           ENDIF,   $PUSH JMP    EDOC
+
+CODE <-L   B POP   C A MOV   H POP   A ORA   NZ IF,
+               BEGIN,
+                   A XRA   L A MOV   RAL   A L MOV
+                   H A MOV   RAL   A H MOV   C DCR
+               Z END,
+           ENDIF,   $PUSH JMP    EDOC
+
+
+
+                     ( CONDITION SETTINGS )
+
+CODE 0=  H POP  L A MOV  H ORA  0 H LXI  Z IF,  H INX  ENDIF,
+         $PUSH JMP    EDOC
+
+CODE 0<  PSW POP  0 H LXI  A ANA   MI IF,  H INX  ENDIF,  $PUSH JMP    EDOC
+
+CODE 0>  B POP  C A MOV  B ORA  0 H LXI  NZ IF,  B A MOV  P IF,
+         H INX  ENDIF,  ENDIF,  $PUSH JMP    EDOC
+
+: NOT 0= ;
+: = - 0= ;         : <> - 0= 0= ;         : < - 0< ;
+: > - 0> ;         : <= - 0> 0= ;         : >= - 0< 0= ;
+
+CODE U<   B POP   H POP   L A MOV   C SUB   H A MOV   B SBB
+          0 H LXI   C IF,   H INX   ENDIF,   $PUSH JMP    EDOC
+
+: U> SWAP U< ;         : U<= U> 0= ;         : U>= U< 0= ;
+
+Š
+                   ( CONDITIONAL BASICS )
+
+CODE $IF   B POP   C A MOV   B ORA   Z IF,   XCHG   M E MOV
+           H INX   M D MOV   $NEXT JMP   ENDIF,   D INX   D INX
+           $NEXT JMP   EDOC
+
+CODE $ELSE   XCHG   M E MOV   H INX   M D MOV   $NEXT JMP  EDOC
+
+
+
+                ( $DO, $+LOOP, EXIT, I, J, K )
+
+CODE $DO   B POP   XCHG   XTHL   XCHG   RPTR LHLD   H DCX
+           D M MOV   H DCX   E M MOV   H DCX   B M MOV   H DCX
+           C M MOV   RPTR SHLD   H POP   $NEXTHL JMP    EDOC
+
+CODE $+LOOP   B POP   D PUSH   RPTR LHLD   M E MOV   H INX   M D MOV
+	      H INX   XCHG   B DAD   XCHG   M C MOV   H INX   M B MOV
+	      E A MOV   C SUB   D A MOV   B SBB   NC IF,
+		   H INX   RPTR SHLD   H POP   H INX   H INX   $NEXTHL JMP
+	      ENDIF,   H DCX   H DCX   D M MOV   H DCX   E M MOV   H POP
+	      M E MOV   H INX   M D MOV   $NEXT JMP    EDOC
+ 
+CODE EXIT  RPTR LHLD  H INX  H INX  M C MOV  H INX  M B MOV  H DCX
+           H DCX  B M MOV  H DCX  C M MOV  $NEXT JMP    EDOC
+
+CODE I  0 B LXI  RPTR LHLD  B DAD  M C MOV  H INX  M B MOV
+        B PUSH  $NEXT JMP    EDOC
+
+CODE J  4 B LXI  'B I 3 + JMP   EDOC
+
+CODE K  8 B LXI  'B I 3 + JMP   EDOC
+
+
+
+              ( MORE ARITHMETIC OPERATIONS )
+
+: ABS DUP 0< IF 
+     MINUS 
+ ENDIF ;
+: COM FFFF X| ;
+: -- SWAP - ;
+: MIN 2DUP > IF SWAP ENDIF DROP ;
+: MAX 2DUP < IF SWAP ENDIF DROP ;
+: @X @ BSWAP ;
+
+
+
+                ( HIGH LEVEL MATH FUNCTIONS )
+
+CODE *   0 H LXI   B POP   XCHG   XTHL   XCHG   BEGIN,
+	      A ANA   B A MOV   RAR   A B MOV   C A MOV   RAR
+	      A C MOV   C IF,
+		   D DAD
+	      ENDIF,   XCHG   H DAD   XCHG   C A MOV   B ORA
+	 Z END,   XTHL   $NEXTHL JMP    EDOC
+
+
+CODE U/MOD   XCHG   D POP   XTHL   XCHG   0 B LXI   B PUSH
+             L A MOV   H ORA   Z IF,
+                 D/0AD LHLD   PCHL
+             ENDIF,   STC   BEGIN,   C A MOV   RAL   A C MOV
+                 B A MOV   RAL   A B MOV   H DAD
+             C END,   H A MOV   RAR   A H MOV   L A MOV   RAR
+             A L MOV   BEGIN,
+                  E A MOV   D ORA   NZ IF,
+                     STC   L A MOV   E SBB   H A MOV   D SBB   C IF,Š                          XTHL   B DAD   XTHL   E A MOV   L SUB
+                          A E MOV   D A MOV   H SBB   A D MOV
+                      ENDIF,   A ANA   H A MOV   RAR   A H MOV
+                      L A MOV   RAR   A L MOV   A ANA   B A MOV
+                      RAR   A B MOV   C A MOV   RAR   A C MOV
+                     ELSE,   STC
+                 ENDIF,
+             C END,   H POP   XCHG   XTHL   D PUSH   $NEXTHL JMP
+     EDOC
+
+
+: /MOD   OVER 0<   OVER 0<  OVER X|  2SWAP
+  SWAP ABS SWAP ABS    U/MOD    ROT IF
+      MINUS
+  ENDIF   ROT IF
+      SWAP MINUS SWAP
+  ENDIF ;
+
+: / /MOD SWAP DROP ;
+
+: MOD /MOD DROP ;
+
+
+
+
+                             ( BASIC CASE WORDS )
+
+: $CASE R> DUP 2 + SWAP @ >R >R ;
+: $=: OVER = IF
+     DROP  R> 2 + >R 
+     ELSE R> @ >R
+ ENDIF ;
+: $;; R> DROP ;
+: NOCASE DUP ;
+
+
+
+  ( $;CODE ;:  )
+: $:;CODE R> CURRENT @ @ SYMTP @ + 3 + @ 1+ ! ;
+
+: $VOCAB @ DUP CVOC ! @ CONTEXT ! ;
+
+BASEVOCAB FORTH
+FORTH DEFINITIONS
+ 
+
+                  ( BMOVE, RMOVE, FILL )
+
+: BMOVE DUP IF $BMOVE ELSE DROP 2DROP ENDIF ;
+
+: RMOVE DUP IF SWAP OVER 1- + SWAP ROT OVER 1- + ROT ROT $RMOVE
+      ELSE DROP 2DROP ENDIF ;
+
+: FILL 3 PICK IF
+     OVER B! DUP 1+ ROT 1- BMOVE
+     ELSE 2DROP DROP
+ ENDIF ;
+
+: BLANK 20 FILL ;
+
+
+
+
+
+( ==================================================================== )
+( 			 FILE SYSTEM SECTION 			       )
+( ==================================================================== )
+                           ?FILESYS IFTRUE
+
+
+
+0 VARIABLE OP-VER#		( CONTAINS CP/M VERSION NUMBER, SET BY ININIT )
+
+
+
+           ( CHARACTER LEVEL INTERFACES TO CP/M )
+
+
+CODE CALLCPM   B POP   H POP   D PUSH   XCHG   05 CALL   B H MOV
+               A L MOV   XTHL   $NEXTHL JMP     EDOC
+
+
+: CIN 1 DUP CALLCPM DUP 3 = IF
+     GO-OPSYS                           ( CTRL-C )
+     ELSE DUP 12 = IF
+         RESTARTAD @ GO               	( CTRL-R )
+         ELSE DUP 13 = IF
+             DROP RECURSE		( CTRL-S )
+         ENDIF
+     ENDIF
+ ENDIF ;
+ 
+: CIS 0B DUP CALLCPM IF
+     CIN DROP
+ ENDIF ;
+
+: COUT CIS  2 CALLCPM DROP ;
+ 
+
+                             ( CTYPE, $C" )
+
+: CTYPE DUP IF
+     0 DO
+         DUP B@ COUT 1+
+     LOOP DROP
+     ELSE 2DROP
+ ENDIF ;
+
+: $C" R> DUP B@ SWAP 1+ SWAP 2DUP + >R CTYPE ;
+
+
+
+                       ( FILE INTERFACES )
+
+80 CONSTANT BUFSIZE
+1A CONSTANT EOFCHR
+
+: FFLAGS @ ;
+: BUFP @ 1+ ;
+: BUFLEN @ 3 + ;
+: SCHAN# @ 5 + ;
+: BUFAD 2 + @ ;
+: FCB 4 + @ ;
+
+
+: FFLAGS@& OVER FFLAGS B@ & ;
+
+: FFLAGS|! OVER FFLAGS B@ | OVER FFLAGS B! ;
+
+: SERIAL 80 FFLAGS@& ;
+
+
+: SHOW-FNAME SERIAL IF
+     SCHAN# @ IF
+	 C" #LST"
+	 ELSE C" #CRT"
+     ENDIF
+     ELSE FCB DUP 1+ 8 CTYPE   C" ."   9 + 3 CTYPE
+ ENDIF ; 
+
+: FERRS 0D COUT 0A COUT CASE
+         2  =:  C" READ PAST EOF."                    ;;
+         3  =:  C" FILE NOT OPENED FOR READING."      ;;
+         4  =:  C" FILE NOT OPENED FOR WRITING."      ;;
+         5  =:  C" FILE DOESN'T EXIST."               ;;
+         6  =:  C" DISK WRITE ERROR."                 ;;
+         7  =:  C" FILE CAN'T BE CREATED."            ;;
+ CASEND  C"     "   SHOW-FNAME   0D COUT 0A COUT   RESTARTAD @ GO ;
+
+
+: EOF FFLAGS B@ 1 & ;
+
+: RESET 0FE FFLAGS@&  OVER FFLAGS B!
+   0 OVER 2DUP BUFLEN !   BUFP !
+   FCB 0 OVER  0C + B!    4  SWAP 20 +  0 FILL ;
+
+: FRES DUP RESET   DUP FFLAGS DUP B@ 80 & SWAP B! ;
+
+: BUFADSET 1A CALLCPM DROP ;
+
+
+
+: CLOSE SERIAL NOT IF
+     DUP FCB 10 CALLCPM DROP
+ ENDIF FRES DROP ;
+
+
+: DELETE SERIAL NOT IF
+     DUP FCB 13 CALLCPM DROP
+ ENDIF FRES DROP ;
+
+
+: OPENR FRES  SERIAL NOT IF
+     DUP FCB 0F CALLCPM   0FF = IF
+	 5 FERRS			( NON EXISTANT FILE )
+     ENDIF
+ ENDIF 2 FFLAGS|!  DROP ;
+
+
+: OPENW FRES  SERIAL NOT IF
+     DUP DELETE   DUP FCB 16 CALLCPM 0FF = IF
+	 7 FERRS			( FILE CAN'T BE CREATED )
+     ENDIF
+ ENDIF 4 FFLAGS|!  DROP ;
+
+
+: RENAME SWAP SERIAL  ROT SERIAL  ROT  | IF
+     2DROP
+     ELSE FCB 1+   OVER FCB 11 + 0B $BMOVE    FCB 17 CALLCPM DROP
+ ENDIF ;
+
+
+
+: READ 2 FFLAGS@& IF
+     1 FFLAGS@& IF
+	 2 FERRS			( READ PAST EOF )
+	 ELSE SERIAL IF
+	     0 OVER BUFAD   " > COUT   BEGIN
+		 CIN DUP 0D = IF
+		     DROP 1
+		     ELSE DUP 1B = IF
+			 2DROP DROP 0 OVER BUFAD	( ESCAPE )
+			  C" *ESC*"    0D COUT    0A COUT
+			 ELSE DUP 08 = IF
+			     DROP OVER IF		( CTRL-H )
+				 1- SWAP 1- SWAP   OP-VER# @ 20 < IF
+				     08 COUT
+				 ENDIF
+			     ENDIF
+			     ELSE OVER B!  1+ SWAP 1+ SWAP
+			 ENDIF
+		     ENDIF 0
+		 ENDIF 3 PICK   BUFSIZE 2 -   U>= |
+	     END 0D OVER B! 1+   0A SWAP B!   2 +  OVER BUFLEN !  0A COUT
+	     ELSE DUP BUFAD BUFADSET    DUP FCB 14 CALLCPM
+	       80 BUFADSET IF
+		 1 FFLAGS|!  0		( EOF )
+		 ELSE BUFSIZE
+	     ENDIF OVER BUFLEN !
+	 ENDIF 0 SWAP BUFP !
+     ENDIF
+     ELSE 3 FERRS			( NOT OPENED FOR READING )
+ ENDIF ;
+
+
+
+: WRITE 4 FFLAGS@& IF
+     SERIAL IF
+	 DUP SCHAN# @ IF
+	     5
+	     ELSE 2
+	 ENDIF OVER BUFAD   ROT BUFP DUP @   0 ROT !   0 DO
+	     2DUP B@ 7F &  SWAP CALLCPM DROP 1+
+	 LOOP 2DROP
+	 ELSE DUP BUFAD BUFADSET   DUP FCB 15 CALLCPM   80 BUFADSET   IF
+	     6 FERRS			( WRITE ERRORS )
+	     ELSE 0 SWAP BUFP !
+	 ENDIF
+     ENDIF
+     ELSE 4 FERRS			( NOT OPENED FOR WRITING )
+ENDIF ;
+
+: FLUSH DUP BUFP @ IF
+     WRITE
+     ELSE DROP
+ ENDIF ;
+
+
+: RBYTE CIS   2 FFLAGS@& IF
+     DUP BUFP @   OVER BUFLEN @ U>= IF
+	 DUP READ   DUP EOF IF		( BUFFER EMPTY )
+	     DROP EOFCHR
+	     ELSE RECURSE
+	 ENDIF
+         ELSE DUP BUFP  DUP @ SWAP 1+!   SWAP BUFAD + B@
+     ENDIF
+     ELSE 3 FERRS			( NOT OPENED FOR READING )
+ ENDIF ;
+
+: RCH DUP EOF IF
+     2 FERRS			( READ PAST EOF )
+     ELSE DUP RBYTE 7F & SWAP OVER  EOFCHR = IF
+	 1 FFLAGS|!		( EOF )
+     ENDIF DROP
+ ENDIF ;
+
+
+
+: WBYTE CIS  4 FFLAGS@& IF
+     SERIAL IF
+	 SCHAN# @ IF
+	     5				( PRINTER )
+	     ELSE 2
+	 ENDIF CALLCPM DROP		( DO SERIAL OUTPUT DIRECTLY )
+	 ELSE SWAP OVER DUP BUFP @ SWAP BUFAD + B!
+	   DUP BUFP DUP 1+!   @ BUFSIZE = IF
+	     WRITE			( BUFFER FULL )
+	     ELSE DROP
+	 ENDIF
+     ENDIF
+     ELSE 4 FERRS			( NOT OPENED FOR WRITING )
+ ENDIF ;
+
+
+: WCH SWAP 7F & SWAP WBYTE ;
+
+
+
+
+FALLOC INFILE
+FALLOC OUTFILE
+
+: GCH INFILE RCH ;
+: TCH OUTFILE WCH ;
+
+0 VARIABLE ECHFIB^
+
+: UGCH GCH DUP 5F > OVER 7B < &   UPPER @ & IF
+     20 -
+ ENDIF INFILE SERIAL NOT    INFOF @ 4 & NOT NOT   & IF
+     OVER TCH
+ ENDIF DROP INFOF @ 80 & IF 
+     DUP ECHFIB^ @ WCH			( echo onto echfib if bit 7 set )
+ ENDIF DUP 09 = IF
+     DROP 20
+ ENDIF ;
+
+
+: ININIT 80 INFILE FFLAGS B!    0 INFILE SCHAN# !    INFILE OPENR  
+  0 0C CALLCPM OP-VER# !   ;
+
+: OUTINIT 80 OUTFILE FFLAGS B!    0 OUTFILE SCHAN# !    OUTFILE OPENW ;
+ 
+
+
+                                  IFEND
+( ==================================================================== )
+(                        END FILE SYSTEM SECTION		       )
+( ==================================================================== )
+
+
+
+
+
+
+
+( ==================================================================== )
+(                             OWNIO SECTION			       )
+( ==================================================================== )
+                              ?OWNIO IFTRUE
+
+
+80 BARRAY TBUFF
+0 VARIABLE TBUFP
+0 VARIABLE BUFSIZE
+
+CODE IN-ED    0ED IN   0 H MVI    A L MOV   $PUSH JMP     EDOC
+CODE IN-EC    0EC IN   0 H MVI    A L MOV   $PUSH JMP     EDOC
+CODE OUT-EC   H POP    L A MOV    0EC OUT   $NEXT JMP     EDOC
+
+: COUT BEGIN
+     IN-ED   1 & 		( READ STATUS & WAIT IF NOT READY )
+ END OUT-EC ;			( SEND CHARACTER WHEN READY )
+
+: CIN BEGIN
+     IN-ED   2 &		( READ STATUS & WAIT IF NOT READY )
+ END  IN-EC 7F & DUP COUT ;	( READ CHARACTER & ECHO )
+
+: CIS ;				( DUMMY ROUTINE )
+
+
+
+                             ( CTYPE, $C" )
+
+: CTYPE DUP IF
+     0 DO
+         DUP B@ COUT 1+
+     LOOP DROP
+     ELSE 2DROP
+ ENDIF ;
+
+: $C" R> DUP B@ SWAP 1+ SWAP 2DUP + >R CTYPE ;
+
+
+: TCH COUT ;
+
+: TGET  " > COUT     0 TBUFP !    BEGIN
+     CIN  DUP TBUFP @ TBUFF B!   CASE
+	     0D  =:  TBUFP 1+!   0A COUT   1  ;;			( CR )
+	     1B  =:  C" *ESC*"  0D COUT 0A COUT   0 TBUFP !  0  ;;	( ESC )
+	     08  =:  TBUFP @ IF						( BS )
+			 TBUFP 1-!
+		     ENDIF  0 ;;
+	     NOCASE  =:  TBUFP 1+!   0  ;;
+     CASEND
+ END   TBUFP @ BUFSIZE !    0 TBUFP ! ;
+
+: GCH TBUFP @  BUFSIZE @  >= IF
+     TGET RECURSE
+     ELSE TBUFP @ TBUFF  B@     TBUFP 1+!
+ ENDIF ;
+
+: UGCH GCH ;
+
+: OUTINIT ;
+: ININIT 0 TBUFP !   0 BUFSIZE ! ;
+
+
+                                  IFEND
+( ==================================================================== )
+(                           END OWNIO SECTION			       )
+( ==================================================================== )
+
+
+
+( ==================================================================== )
+( ==================================================================== )
+                   ?FILESYS NOT  ?OWNIO NOT   & IFTRUE
+
+: ININIT ;
+: OUTINIT ;
+
+                                  IFEND
+( ==================================================================== )
+( ==================================================================== )
+
+
+
+                                 ( RESTART )
+
+: $RESTART 0 STATE !   0 FLAGS !    ININIT  OUTINIT    GOQIAD @ GO ;
+
+CODE RESTART    SSIZE STACK SP LXI     RSIZE RSTACK H LXI    RPTR SHLD   
+   		'B $RESTART JMP     EDOC
+'B RESTART RESTARTAD T!
+
+
+
+
+( ==================================================================== )
+(                            CRT I/O SECTION			       )
+( ==================================================================== )
+                               ?CRT IFTRUE
+
+
+( TYPE, $T" )
+ 
+
+: TYPE DUP IF
+     0 DO
+         DUP B@ TCH 1+
+     LOOP DROP
+     ELSE 2DROP
+ ENDIF ;
+
+: $T" R> DUP B@ SWAP 1+ SWAP 2DUP + >R TYPE ;
+
+
+                      ( CRIGHT - COPYRIGHT NOTICE )
+
+: CRIGHT T" (c) Copyright 1980 The Stackworks " ;
+
+
+
+                               ( ABORTS )
+
+: ABORT T"  ABORT " RESTART ;
+
+: PNAME HERE 1+ HERE B@ TYPE ;
+
+: UNDEFINED 0D TCH 0A TCH  PNAME T"  ? " RESTART ;
+
+: D/0 T" D/0 " ABORT ;         'B D/0 D/0AD T!
+
+
+
+                             ( STACK CHECK )
+
+: CHECK SP@ 100 STACK U> IF
+     T" STACK UNDERFLOW" ABORT
+     ELSE RP@ 100 RSTACK U> IF
+         T" RETURN STACK UNDERFLOW" ABORT
+     ENDIF
+ ENDIF ;
+ 
+
+
+                     ( OUTPUT WORDS )
+
+: SPACE 20 TCH ;
+
+: SPACES DUP IF
+     DUP 0 DO
+         SPACE
+     LOOP
+ ENDIF DROP ;
+
+: CR 0D TCH 0A TCH ;
+
+: NASCII DUP 9 > IF
+     7 +
+ ENDIF 30 + ;
+
+: . >R CHECK R> DUP 0< IF
+     MINUS T" -"
+ ENDIF 0 BEGIN
+     1+ SWAP BASE @ U/MOD ROT OVER 0=
+ END SWAP DO
+     NASCII TCH
+ LOOP SPACE ;
+
+: ? @ . ;
+
+: .HEX >R >R CHECK R> R> DUP 0 DO
+     SWAP 10 U/MOD ROT
+ LOOP SWAP DROP 0 DO
+     NASCII TCH
+ LOOP SPACE ;
+
+: X. 4 .HEX ;
+: B. 2 .HEX ;
+
+
+
+
+( ==================================================================== )
+                                OTHERWISE
+
+: D/0 RESTART ;		'B D/0   D/0AD T!
+
+
+                                  IFEND
+( ==================================================================== )
+(                        END OF CRT I/O SECTION			       )
+( ==================================================================== )
+
+
+
+
+
+( ==================================================================== )
+(                          INTERPRETER SECTION			       )
+( ==================================================================== )
+                             ?INTERP IFTRUE
+
+
+
+                 ( BASE CONVERSION WORDS )
+
+: DECIMAL 0A BASE ! ;
+: HEX 10 BASE ! ;
+: OCTAL 8 BASE ! ;
+
+
+
+( ,   B, )
+: , HERE ! 2 DP+!   SYMPTR @ HERE U<= IF
+     T" D>S " ABORT
+ ENDIF ;
+
+: B, HERE B! 1 DP+!   SYMPTR @ HERE U<= IF
+     T" D>S " ABORT
+ ENDIF ;
+ 
+
+
+
+( EXECUTE, LITERAL, LINK )
+
+: EXECUTE DUP 3 + @ SWAP B@ 80 & STATE @ NOT | IF
+     GO
+     ELSE ,
+ ENDIF ;
+
+: LITERAL  STATE @ IF
+     'B LIT , ,
+ ENDIF ;
+
+: LINK SYMPTR @  HERE B@ 1+  -    HERE OVER   HERE B@ 1+ $BMOVE
+   2 - SWAP OVER !     2 - CONTEXT @ OVER !     1- 0 OVER B!
+   DUP SYMPTR !     SYMTP @ - CURRENT @ ! ;
+ 
+
+
+
+        ( WORD - PARSE OUT A WORD FROM THE INPUT STREAM )
+
+
+: DELIM= DUP DELIMITER @ =   OVER 0A =  |    OVER 0D =   | ;
+
+ 
+: WORD HERE 1+ DUP BEGIN
+     DROP UGCH DELIM= NOT
+ END BEGIN
+     OVER B!   1+   UGCH DELIM=
+ END DROP HERE -  1-   HERE B!    20 DELIMITER ! ;
+
+
+
+
+                         ( FIND )
+
+CODE FIND1   XCHG   TEMP SHLD   B POP   H POP   BEGIN,
+             D POP   D PUSH   D DAD   H PUSH   B PUSH   5 D LXI
+             D DAD   B LDAX   A E MOV   E INR   BEGIN,
+                  B LDAX   M CMP   NZ IF,
+                       A XRA
+                       ELSE,   H INX   B INX   E DCR
+                  ENDIF,
+             Z END,   B POP   H POP   E A MOV   A ORA   Z IF,    ( FOUND )
+                  XTHL   TEMP LHLD   XCHG   1 H LXI   $PUSH JMP
+             ENDIF,   H INX   M E MOV   H INX   M D MOV   D A MOV
+             E ORA   Z IF,                        ( END OF VOCABULARY )
+	          H INX   M E MOV   H INX   M D MOV   XCHG
+		  H A MOV   L ORA   Z IF,         ( END OF DICTIONARY )Š                       XTHL   TEMP LHLD   $NEXTHL JMP
+                  ENDIF,   M E MOV   H INX   M D MOV   
+             ENDIF,   XCHG
+	REPEAT,              EDOC
+
+: FIND SYMTP @ CONTEXT @ HERE FIND1 ;
+ 
+
+: NUMBER HERE B@ HERE 1+ DUP B@ 2D = IF 
+     1+ SWAP 1- SWAP -1
+     ELSE 1
+ENDIF 0 2SWAP   SWAP 0  SWAP 0 DO
+     DROP DUP B@   DUP 39 > IF
+         DUP 40 > IF
+             7 -
+             ELSE DROP 80
+         ENDIF
+     ENDIF 30 -   DUP BASE @ U< IF
+         ROT BASE @ *  +   SWAP 1+   1
+         ELSE 2DROP 2DROP 0 EXIT
+     ENDIF
+ LOOP DUP IF
+     2DROP * 1
+ ENDIF ;  
+
+
+
+           ( INTRLP - THE MAIN LOOP FOR THE OUTER INTERPETER )
+
+: INTRLP BEGIN
+     WORD FIND IF
+         EXECUTE
+         ELSE NUMBER IF
+	     LITERAL
+	     ELSE UNDEFINED
+	 ENDIF
+     ENDIF 0
+ END ;
+
+'B INTRLP GOQIAD T!
+
+
+
+: $'B WORD FIND IF
+     3 + @
+     ELSE UNDEFINED
+ ENDIF ;
+: 'B $'B LITERAL ;
+IMP 'B
+
+
+: $'S R> DUP 2 + >R   @  SYMTP @ + ;
+: 'S WORD FIND IF
+     STATE @ IF
+	 'B $'S ,   SYMTP @ - ,
+         ELSE LITERAL
+     ENDIF
+     ELSE UNDEFINED
+ ENDIF ;
+
+: ' WORD FIND IF
+     3 + @ 3 + LITERAL
+     ELSE UNDEFINED
+ ENDIF ;
+
+
+
+                                  IFEND
+( ==================================================================== )
+(                      END OF INTERPRETER SECTION		       )
+( ==================================================================== )
+
+
+
+
+
+( ==================================================================== )
+(                           COMPILER SECTION			       )
+( ==================================================================== )
+                            ?COMPILE IFTRUE
+
+
+
+( C", T" )
+
+: C" 22 DELIMITER !   STATE @ IF
+     'B $C" ,   WORD HERE B@ 1+ DP+!
+     ELSE WORD HERE 1+ HERE B@ CTYPE
+ ENDIF ;
+IMP C"
+
+: T" 22 DELIMITER !   STATE @ IF
+     'B $T" ,   WORD HERE B@ 1+ DP+!
+     ELSE WORD PNAME
+ ENDIF ;
+IMP T"
+
+
+: DC DEPTH @ IF
+     CR CR T" UNBALANCED NESTING" ABORT
+ ENDIF ;
+ 
+
+
+           ( CUR@@CON!, $CODE, CONSTANT, VARIABLE, :, ;, ;: )
+
+: CUR@@CON! CURRENT @ @ CONTEXT ! ;
+
+: $CODE CUR@@CON! WORD INFOF @ 1 & IF
+     FIND IF
+         DROP T" REDEF " PNAME 0D TCH 0A TCH
+     ENDIF
+ ENDIF HERE LINK ;
+
+: CONSTANT $CODE 0CD B, 'B $CONSTANT , , CUR@@CON! ;
+: VARIABLE HERE 5 + CONSTANT , ;
+
+: : 1 STATE ! $CODE 0CD B, 'B $: , 0 DEPTH ! ;
+: ; CUR@@CON! 0 STATE ! 'B $; , DC ;            IMP ;
+: ;: 'B $:;CODE ,  0CD B,  'B $: , DC ;         IMP ;:
+ 
+
+
+                        ( CONDITIONAL BRANCHING )
+
+ : IF 'B $IF , HERE DUP 2 + ,   DEPTH 1+! ;
+ : ELSE HERE 4 + SWAP ! 'B $ELSE , HERE DUP 2 + , ;
+ : ENDIF HERE SWAP !   DEPTH 1-! ;
+IMP IF            IMP ELSE          IMP ENDIF
+
+ : BEGIN HERE   DEPTH 1+! ;
+ : END  'B $IF , ,   DEPTH 1-! ;
+IMP BEGIN         IMP END
+
+
+: DO 'B $DO , HERE   DEPTH 1+! ;
+: +LOOP 'B $+LOOP , ,   DEPTH 1-! ;
+: LOOP 1 LITERAL +LOOP ;
+IMP DO             IMP +LOOP              IMP LOOP
+ 
+
+
+: COMPILE $'B , ;
+: IMP 'S DUP B@ 80 | SWAP B! ;
+: IMMEDIATE 80   SYMPTR @   B! ;
+
+IMP 'S          IMP '          IMP COMPILE
+
+
+: [ 0 STATE ! ;      IMP [
+: ] 1 STATE ! ;      IMP ]
+
+: (  29 DELIMITER ! WORD ;      IMP (
+
+
+
+             ( DATA STRUCTURE CONSTRUCTIONS )
+
+: ARRAY HERE 5 + CONSTANT DUP + DP+! ;: @ OVER + + ;
+
+: BARRAY HERE 5 + CONSTANT DP+! ;: @ + ;
+
+: SET CONSTANT , ;:  DUP 2 + @ SWAP @ ! ;
+
+
+
+
+                   ( VOCABULARY WORDS )
+
+: VLIST CONTEXT @ BEGIN
+     SYMTP @ +   DUP 3 + @ X. SPACE   DUP B@ B. SPACE   DUP 5 +
+     DUP B@ DUP .   SWAP 1+ SWAP TYPE CR   1+ @ DUP 0=
+ END DROP ;
+
+: $FORGET DUP 3 + @ DP !      DUP 1+ @  CURRENT @ !  CUR@@CON!
+   5 + COUNT + SYMPTR ! ;
+
+: FORGET COMPILE 'S     'S $FORGET    EXECUTE ;
+IMP FORGET
+
+: VOCABULARY SYMPTR @ 6 - DUP SYMPTR !   6 OVER 0 FILL
+   CURRENT @ OVER 3 + !   SYMTP @ - VARIABLE   ;: @ DUP CVOC ! @ CONTEXT ! ;
+
+: DEFINITIONS CVOC @ CURRENT ! ;
+
+
+
+             ( PROGRAM CONTROL CONSTRUCTIONS )
+
+: WHILE COMPILE IF   DEPTH 1-! ;
+: REPEAT 'B $ELSE , SWAP ,   HERE SWAP !   DEPTH 1-! ;
+IMP WHILE         IMP REPEAT
+
+: RECURSE CURRENT @ @ SYMTP @ + 3 + @ , ;
+IMP RECURSE
+
+
+                            ( CASE )
+
+: CASE 'B $CASE , HERE 0 ,   DEPTH 1+! ;
+: =: 'B $=: , HERE 0 , ;
+: ;; 'B $;; , HERE SWAP ! ;
+: CASEND  'B R> ,   'B 2DROP ,    HERE SWAP !   DEPTH 1-! ;
+IMP CASE    IMP =:    IMP ;;    IMP CASEND
+
+
+: " WORD HERE 1+ B@ LITERAL ;      IMP "
+
+
+
+
+   ( ASSEMBLER BASICS - CODE, ;CODE, EDOC, $PUSH, $NEXT )
+
+VOCABULARY ASSEMBLER
+
+: CODE $CODE ASSEMBLER ;
+: ;CODE  ' $:;CODE ,    0 STATE !     ASSEMBLER ;
+IMP ;CODE
+
+ASSEMBLER DEFINITIONS
+: EDOC CUR@@CON! ;
+
+: $PUSH  'B $$PUSH ;
+: $NEXT  $PUSH  1+ ;
+: $NEXTHL  $NEXT  1+ ;
+
+FORTH DEFINITIONS
+
+
+
+                                  IFEND
+( ==================================================================== )
+(                        END OF COMPILER SECTION		       )
+( ==================================================================== )
+
+
+
+
+
+( ==================================================================== )
+(                      COMPILER/FILE SYSTEM SECTION 		       )
+( ==================================================================== )
+                       ?FILESYS ?COMPILE &  IFTRUE
+
+                       ( MORE FILE RELETED WORDS )
+
+: FALLOC HERE 9 + CONSTANT   HERE 0B + ,   HERE 89 + ,   0 B,
+   0 , 0 , 0 ,   A4 DP+! ;: ;
+
+
+( NAMIT  -  FIB^ NAMIT FILENAME   --  NAME THE FILE ASSOCIATED WITH FIB^ )
+
+0 VARIABLE WPTR
+0 VARIABLE WLN
+
+: GCHR WLN @ IF
+     WPTR 1+!   WLN 1-!   WPTR @ B@ 1
+     ELSE 0
+ ENDIF ;
+
+: $NAMIT DUP FCB 0C OVER BLANK   0 OVER B!   0 9 ROT   GCHR DROP GCHR IF
+     DUP " : = IF
+         DROP 40 - OVER B!           ( UNIT SPECIFIED )
+         ELSE ROT 1+ ROT OVER B!  1+ SWAP OVER B!   SWAP 2 - SWAP
+     ENDIF 1+ SWAP 1- SWAP BEGIN   GCHR WHILE
+         DUP " . = IF
+             DROP 3 PICK 0= IF
+                 + SWAP 1+ 3 ROT
+             ENDIF
+             ELSE 3 PICK IF
+                 OVER B! 1+ SWAP 1- SWAP
+                 ELSE DROP
+             ENDIF
+         ENDIF
+     REPEAT
+     ELSE OVER 1+ B!
+ ENDIF 2DROP DROP DUP FCB 1+ DUP B@   " #   = IF
+     1+ B@  " L  =   OVER SCHAN# !   80
+     ELSE DROP 0
+ ENDIF SWAP FFLAGS B! ;
+
+: NAMIT WORD HERE B@ WLN !   HERE WPTR !   $NAMIT ;
+
+
+: $FLOAD R> DUP B@   2DUP + 1+ >R   WLN ! WPTR !   INFILE $NAMIT
+   INFILE OPENR    INTRLP ;
+
+: FLOAD STATE @ IF
+     'B $FLOAD ,   WORD HERE B@ 1+ DP+!
+     ELSE INFILE NAMIT   INFILE OPENR   INTRLP
+ENDIF ;
+IMP FLOAD
+
+  
+: [END-OF-FILE]    CR   INFILE CLOSE      R> R> 2DROP   ININIT  ;
+
+
+                                  IFEND
+( ==================================================================== )
+(                 END OF COMPILER/FILE SYSTEM SECTION 		       )
+( ==================================================================== )
+
+
+
+
+[END-OF-FILE]
+

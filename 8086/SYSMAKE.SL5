@@ -1,0 +1,959 @@
+0 UPPER !
+
+( Disclaimer: This source code is the result of reverse-engineering )
+( by a third party.  While all effort has been made to ensure the   )
+( program performs correctly, it is provided without warranty and   )
+( its use is at your own risk.                                      )
+
+             ( SL5 8086 METACOMPILER FOR CP/M AND DOS )
+
+                          ( 2012-10-17 )
+
+
+0 INFOF !      ( TURN OFF ECHO AND REDEF MESSAGE )
+0 UPPER !      ( SET TO LOWER CASE )
+
+
+FORTH DEFINITIONS  HEX
+
+VOCABULARY TRANSITION  TRANSITION DEFINITIONS
+
+VOCABULARY ASSEMBLER
+
+5 CONSTANT MACHINE#  ( 8086 TARGET )
+
+0  VARIABLE ROMF
+1  VARIABLE ?SYMTAB
+0  VARIABLE SGEN
+0  VARIABLE ASSM
+0  VARIABLE INITDP
+0  VARIABLE CSAD
+0  VARIABLE LTDP
+40 VARIABLE VAR-MAX
+0  VARIABLE TVAR-TOP
+0  VARIABLE TVAR-SIZE
+0  VARIABLE TRVP
+
+: TRVS  TVAR-TOP @ + ;
+
+4 VARIABLE TINFOF
+
+20 BARRAY TRVOS
+
+0   VARIABLE TRVOP
+200 VARIABLE TSYMSP
+100 VARIABLE TDP
+0   VARIABLE TCURRENT
+0   VARIABLE TCONTEXT
+0   VARIABLE TCVOC
+0   VARIABLE TVS
+0   VARIABLE TVP
+0   VARIABLE TSYMTP
+0   VARIABLE TSYMPTR
+0   VARIABLE VHEAD
+0   VARIABLE TCUR
+
+FALLOC COMFILE
+
+: OPENRW
+  DUP OPENR 4 FFLAGS|! DROP ;
+
+: SETUP
+  COMFILE NAMIT COMFILE OPENW ;
+
+: WRITEJMP
+  COMFILE CLOSE  COMFILE OPENR  COMFILE READ
+  COMFILE CLOSE  COMFILE OPENRW  CSAD @ INITDP @ - 3 - COMFILE BUFAD 1+ !
+  COMFILE WRITE  COMFILE CLOSE ;
+
+: WBYTE
+  COMFILE WBYTE ;
+
+: WWORD
+  DUP 0FF & WBYTE 8 ->L WBYTE ;
+
+: SHOW-NAME
+  DP @ COUNT TYPE ;
+
+: SYS-CHECK
+  TSYMTP @  SYMPTR @  U>= IF
+    CR CR  T" SYS ERROR #2 "  GO-OPSYS
+  ELSE
+    TSYMPTR @  DP @ U<= IF
+      CR CR  T" SYS ERROR #3 "  GO-OPSYS
+    ENDIF
+  ENDIF ;
+
+0 VARIABLE CBT  ( COMPILE BUFFER ADDRESS )
+0 VARIABLE CBP  ( COMPILE BUFFER OFFSET )
+
+200 VARIABLE CB-SIZE
+
+: CBUFF ( offs -- adr )  CBT @ + ;
+
+: CBUFP ( -- adr )  CBP @ CBUFF ;
+
+: CCLEAR ( -- )
+  CB-SIZE @  0 CBUFF  0 FILL  0 CBP ! ;
+
+: CBFLUSH ( -- )
+  CBP @ IF
+    CBP @ CBUFF  0 CBUFF  DO  I B@ WBYTE  LOOP
+  ENDIF CCLEAR ;
+
+: B, ( c -- )
+  SGEN @ IF
+    TDP @ LTDP @ -  CBP +!
+    CBP @ CB-SIZE @ U>= IF
+      T" COMP. BUFFER OVERFLOW." CR  GO-OPSYS
+    ENDIF
+    CBUFP B!  CBP 1+!  TDP 1+!  TDP @ LTDP !
+  ELSE  B,  ENDIF ;
+
+: , ( x -- )
+  SGEN @ IF
+    DUP 0FF & B,  8 ->L B,
+  ELSE  ,  ENDIF ;
+
+: DPAD ( n -- )
+  DUP IF
+    CBFLUSH  DUP 0 DO  0 WBYTE  LOOP
+    DUP TDP +!  DUP LTDP +!
+  ENDIF DROP ;
+
+: TUNDEFINED ( -- )
+  CR PNAME  T"  IS UNDEFINED."  GO-OPSYS ;
+
+: TFIND
+  TSYMTP @ TCONTEXT @ DP @ FIND1 ;
+
+: $C'
+  R> DUP COUNT + >R
+  TSYMTP @ TCONTEXT @ ROT FIND1
+  IF  3 + @  ELSE  TUNDEFINED  ENDIF ;
+
+: 'C
+  'B $C' ,  WORD HERE B@ 1+ DP+! ;  IMP 'C
+
+
+
+                  ( INTERPRETER CONDITIONALS )
+
+: IFEND ;
+
+: OTHERWISE  'S IFEND   BEGIN
+     WORD FIND IF
+         OVER = 
+         ELSE 0
+     ENDIF
+ END DROP ;
+
+: IFTRUE NOT IF
+     'S OTHERWISE   'S IFEND    BEGIN
+         WORD FIND IF
+             DUP 4 PICK =     SWAP 3 PICK =    |
+             ELSE 0
+         ENDIF
+     END 2DROP
+ ENDIF ;
+
+: IFDEFINED WORD FIND IF
+     DROP 1
+     ELSE 0
+ ENDIF IFTRUE ;
+
+
+
+: DALLOC
+  MINUS TVP +!  TVP @ ;
+
+: MAKE-ENTRY
+  TRVP @ TVAR-SIZE @ U>= IF
+    CR CR  T" SYS ERROR #1"  GO-OPSYS
+  ENDIF  TRVP @ TRVS B!
+  TRVP @ 1+ TRVS !  TRVP @ 3 + TRVS !  5 TRVP +! ;
+
+: FIND-ADDR
+  1 TRVP @ IF
+    TRVP @ TRVS 0 TRVS DO
+      DROP I 1+ @ OVER = IF
+        DROP I 0 EXIT
+      ELSE  1  ENDIF
+    5 +LOOP
+  ENDIF ;
+
+: NVALS
+  0 TRVP @ 0 DO  I TRVS B@ +  5 +LOOP ;
+
+: VOCAB-ENTRY
+  TRVOP @ TRVOS !  TRVOP @ 2 + TRVOS !  4 TRVOP +! ;
+
+: UPDATE-SYMTAB
+  TRVOP @ IF
+    TRVOP @ 0 DO  I TRVOS DUP @ SWAP 2 + @ !  4 +LOOP
+  ENDIF ;
+
+: LITERAL
+  SGEN @ IF
+    STATE @ IF  'C LIT ,  ,  ENDIF
+  ELSE  LITERAL  ENDIF ;
+
+: HERE ( -- a )
+  SGEN @ IF  TDP  ELSE  DP  ENDIF @ ;
+
+: REL, ( a -- )  HERE 2 + - , ;
+
+: LINK
+  SGEN @ IF
+    DP @ B@  6 + MINUS  TSYMPTR +!
+    TSYMPTR @ 0 OVER B!  1+ TCURRENT @ @ OVER !
+    2 + HERE OVER !  2 + DP @ SWAP OVER B@ 1+ BMOVE
+    TSYMPTR @  TSYMTP @ -  TCURRENT @ !
+  ELSE  HERE LINK  ENDIF ;
+
+: $'B
+  SGEN @ IF
+    WORD TFIND IF  3 + @  ELSE  TUNDEFINED  ENDIF
+  ELSE  $'B  ENDIF ;
+
+: 'B ( "name" )
+  $'B LITERAL ;  IMP 'B
+
+: ' ( "name" )
+  SGEN @ IF
+    WORD TFIND IF  3 + @ 3 + LITERAL  ELSE  TUNDEFINED  ENDIF
+  ELSE  COMPILE '  ENDIF ;  IMP '
+
+: 'S ( "name" )
+  SGEN @ IF
+    WORD TFIND IF
+      STATE @ IF  'C $'S ,  TSYMTP @ - ,  ELSE  LITERAL  ENDIF
+    ELSE  TUNDEFINED  ENDIF
+  ELSE  COMPILE 'S  ENDIF ;  IMP 'S
+
+: COMPILE ( "name" )
+  $'B , ;  IMP COMPILE
+
+: IMP ( "name" )
+  SGEN @ IF
+    COMPILE 'S  DUP B@ 080 | SWAP B!
+  ELSE  IMP  ENDIF ;
+
+: COMP ( -- )
+  1 STATE !  TCURRENT @ @ TCONTEXT ! ;
+
+: $CODE
+  WORD  CBFLUSH  TFIND IF
+    DROP  CR T" TARGET REDEF " PNAME
+  ENDIF LINK ;
+
+: TCO=TCU ( -- )
+  TCURRENT @ @ TCONTEXT ! ;
+
+: :
+  SGEN @ IF
+    COMP  $CODE  0E8 B,  'C $: REL,
+  ELSE  :  ENDIF ;
+
+: ;
+  SGEN @ IF
+    TCURRENT @ @ TCONTEXT !  0 STATE !  'C $; ,
+  ELSE  COMPILE ;  ENDIF ;  IMP ;
+
+: ;CODE
+  SGEN @ IF
+    'C $:;CODE ,  0 STATE !  1 ASSM !
+  ELSE  COMPILE ;CODE  ENDIF ;  IMP ;CODE
+
+: ;:
+  SGEN @ IF
+    'C $:;CODE ,  0E8 B,  'C $: REL,
+  ELSE  COMPILE ;:  ENDIF ;  IMP ;:
+
+: CODE
+  SGEN @ IF
+    CBFLUSH  1 ASSM !  $CODE
+  ELSE  CODE  ENDIF ;
+
+: TCONSTANT
+  0 SGEN !  TRANSITION DEFINITIONS  LINK
+  0100 B@ 0E9 = IF ( 8086 HOST )
+    0E8 B, 'B $CONSTANT REL,  ELSE
+    0CD B, 'B $CONSTANT ,     ENDIF   ,  CUR@@CON!
+  1 SGEN !
+  ;: @ ;
+
+: XCONSTANT
+  CONSTANT ;
+
+: CONSTANT
+  SGEN @ IF
+    $CODE  0E8 B,  DUP TCONSTANT
+    'C $CONSTANT REL,  ,  TCO=TCU
+  ELSE  CONSTANT  ENDIF ;
+
+: VARIABLE
+  SGEN @ IF
+    $CODE  0E8 B,  ROMF @ IF
+      2 DALLOC  DUP ROT SWAP 1 MAKE-ENTRY
+      DUP TCONSTANT  'C $CONSTANT REL,  ,
+    ELSE
+      HERE 4 + TCONSTANT  'C $CONSTANT REL,
+      HERE 2 + ,  DUP HERE 0 MAKE-ENTRY ,
+    ENDIF
+    TCO=TCU
+  ELSE  VARIABLE  ENDIF ;
+
+: C"
+  SGEN @ STATE @ & IF
+    'C $C" ,  " " DELIMITER !  WORD
+    DP @  DUP B@ 1+ 0 DO
+      DUP B@ B, 1+
+    LOOP DROP
+  ELSE  ENDIF ;  IMP C"
+
+: T"
+  SGEN @ STATE @ & IF
+    'C $T" ,  " " DELIMITER !  WORD
+    DP @  DUP B@ 1+ 0 DO
+      DUP B@ B, 1+
+    LOOP DROP
+  ELSE  COMPILE T"  ENDIF ;  IMP T"
+
+: "
+  WORD  DP @ 1+ B@ LITERAL ;  IMP "
+
+: TVOCABULARY
+  TSYMPTR @ 6 -  DUP TSYMPTR !  6 OVER 0 FILL
+  TCURRENT @ OVER 3 + ! DUP 3 + TCUR @ VOCAB-ENTRY
+  $CODE  0E8 B,  TRVP @ TRVS TCONSTANT  'C $VOCAB REL,
+  TSYMTP @ - ROMF @ IF
+    2 DALLOC DUP ,
+  ELSE
+    HERE 2 + , HERE  0 ,
+  ENDIF
+  1 MAKE-ENTRY
+  ;:  @ 1+  DUP TCVOC !  2 + @ TCONTEXT ! ;
+
+: VOCABULARY
+  SGEN @ IF  TVOCABULARY  ELSE  VOCABULARY  ENDIF ;
+
+: VOCABBASE
+  TSYMPTR @ 6 -  DUP TSYMPTR !  6 OVER 0 FILL
+  TSYMTP @ -  DUP VHEAD !  TCONTEXT !  VHEAD TCURRENT ! ;
+
+: BASEVOCAB
+  $CODE  TRVP @ TRVS TCONSTANT  0E8 B,  'C $VOCAB REL,
+  ROMF @ IF
+    2 DALLOC  DUP ,
+  ELSE
+    HERE 2 + ,  HERE  0 ,
+  ENDIF
+  VHEAD @ SWAP 1 MAKE-ENTRY
+  ;:  @ 1+  DUP TCVOC !  2 + @ TCONTEXT ! ;
+
+: DEFINITIONS
+  SGEN @ IF
+    TCVOC @ DUP @ TCUR !  2 + TCURRENT !
+  ELSE  DEFINITIONS  ENDIF ;
+
+: IF
+  SGEN @ IF
+    'C $IF ,  CBUFP HERE 2 + ,
+  ELSE  COMPILE IF  ENDIF ;  IMP IF
+
+: ELSE
+  SGEN @ IF
+    HERE 4 + SWAP !  'C $ELSE ,  CBUFP HERE 2 + ,
+  ELSE  COMPILE ELSE  ENDIF ;  IMP ELSE
+
+: ENDIF
+  SGEN @ IF
+    HERE SWAP !
+  ELSE  COMPILE ENDIF  ENDIF ;  IMP ENDIF
+
+: BEGIN
+  SGEN @ IF
+    HERE
+  ELSE  COMPILE BEGIN  ENDIF ;  IMP BEGIN
+
+: END
+  SGEN @ IF
+    'C $IF ,  ,
+  ELSE  COMPILE END  ENDIF ;  IMP END
+
+: WHILE
+  COMPILE IF  SGEN @ 0= IF  DEPTH 1-!  ENDIF ;  IMP WHILE
+
+: REPEAT
+  SGEN @ IF
+    'C $ELSE ,  SWAP ,  HERE SWAP !
+  ELSE  COMPILE REPEAT  ENDIF ;  IMP REPEAT
+
+: RECURSE
+  SGEN @ IF
+    TCURRENT @ @ TSYMTP @ + 3 + @ ,
+  ELSE  COMPILE RECURSE  ENDIF ;  IMP RECURSE
+
+: DO
+  SGEN @ IF
+    'C $DO ,  TDP @
+  ELSE  COMPILE DO  ENDIF ;  IMP DO
+
+: +LOOP
+  SGEN @ IF
+    'C $+LOOP ,  ,
+  ELSE  COMPILE +LOOP  ENDIF ;  IMP +LOOP
+
+: LOOP
+  SGEN @ IF
+    1 LITERAL  'C $+LOOP ,  ,
+  ELSE  COMPILE LOOP  ENDIF ;  IMP LOOP
+
+: XARRAY
+  TCONSTANT ;: @ OVER + + ;
+
+: XBARRAY
+  TCONSTANT ;: @ + ;
+
+: ARRAY
+  SGEN @ IF
+    $CODE  0E8 B,  'C $ARRAY REL,  DUP +
+    ROMF @ IF
+      DALLOC DUP ,
+    ELSE
+      HERE 2 + DUP , SWAP DPAD
+    ENDIF
+    XARRAY TCO=TCU
+  ELSE  ARRAY  ENDIF ;
+
+: BARRAY
+  SGEN @ IF
+    $CODE  0E8 B,  'C $BARRAY REL,  ROMF @ IF
+      DALLOC DUP ,
+    ELSE
+      HERE 2 + DUP , SWAP DPAD
+    ENDIF
+    XBARRAY TCO=TCU
+  ELSE  BARRAY  ENDIF ;
+
+: T@
+  FIND-ADDR IF
+    CR CR  T" ADDRESS NOT FOUND " X.  RESTART
+  ENDIF 3 + @ ;
+
+: T!
+  FIND-ADDR IF  1 MAKE-ENTRY
+  ELSE  1 OVER B! 3 + !  ENDIF ;
+
+: CASE
+  SGEN @ IF
+    'C $CASE ,  CBUFP 0 ,
+  ELSE  COMPILE CASE  ENDIF ;  IMP CASE
+
+: =:
+  SGEN @ IF
+    'C $=: ,  CBUFP 0 ,
+  ELSE  COMPILE =:  ENDIF ;  IMP =:
+
+: ;;
+  SGEN @ IF
+    'C $;; ,  HERE SWAP !
+  ELSE  COMPILE ;;  ENDIF ;  IMP ;;
+
+: CASEND
+  SGEN @ IF
+    'C R> ,  'C 2DROP ,  HERE SWAP !
+  ELSE  COMPILE CASEND  ENDIF ;  IMP CASEND
+
+: SET
+  SGEN @ IF
+    $CODE  'C $SET ,  , ,  TCO=TCU
+  ELSE  SET  ENDIF ;
+
+: FMAKE
+  SGEN @ IF
+    $CODE  0E8 B,  'C $FMAKE REL,
+    ROMF @ IF  7 DALLOC  , , ,
+    ELSE  HERE 6 + , , , 0 B, 0 , 0 , 0 ,  ENDIF
+  ELSE  UNDEFINED  ENDIF ;
+
+: FALLOC
+  SGEN @ IF
+    ROMF @ IF  024 DALLOC  080 DALLOC  FMAKE
+    ELSE  HERE 090 +  HERE 010 +  FMAKE  0A4 TDP +!  ENDIF
+  ELSE  FALLOC  ENDIF ;
+
+: $ENCODE"
+  R> DUP COUNT 5 + 0FF & + >R
+  DUP B@ 6 + 0FF & 0 DO  DUP B@ B, 1+  LOOP DROP ;
+
+: ENCODE" ( "name" )
+  'B $ENCODE" ,  022 DELIMITER !  WORD  5 HERE DUP B@ 1+
+  0 DO  2DUP B@ -- B, 1+ SWAP 5 * SWAP  LOOP 2DROP ;  IMP ENCODE"
+
+: DECODE ( a )
+  5 SWAP 2DUP B@ + 0FF & 0 DO
+    1+ SWAP 5 * SWAP 2DUP B@ + 0FF & TCH
+  LOOP 2DROP ;
+
+: SIGN-ON ( -- )
+  CR T" Sysmake version "  0103 DECODE
+  MACHINE# 0= IF
+    T"    Z80 - CP/M" CR
+  ELSE
+    MACHINE# 1 = IF
+      T"    8080 - CP/M" CR
+    ELSE
+      MACHINE# 5 = IF
+        T"    8086 - DOS" CR
+      ENDIF
+    ENDIF
+  ENDIF
+  0103 COUNT 5 + 0FF & + DECODE  CR CR ;
+
+: VINIT ( -- )
+  DP @ TVAR-TOP !  VAR-MAX @ 7 *  DUP TVAR-SIZE !  DP+!
+  TVS @ TVP !  DP @ CBT !  CB-SIZE @ DP+!
+  SYMPTR @ TSYMSP @ -  DUP TSYMTP !  TSYMPTR !
+  TDP @  DUP INITDP !  LTDP ! ;
+
+: COMP-DIR
+  TINFOF @ 1 & IF
+    CR T" COMPILER DIRECTIVE:  "  DP @ 1+ DP @ B@ TYPE
+  ENDIF EXECUTE ;
+
+: SLOOP
+  BEGIN
+    SYS-CHECK WORD STATE @ IF
+      TFIND IF
+        DUP B@ 080 & IF
+          DROP TRANSITION FIND IF
+            COMP-DIR
+          ELSE
+            NUMBER IF  LITERAL  ELSE  UNDEFINED  ENDIF
+          ENDIF
+        ELSE
+          3 + @ ,
+        ENDIF
+      ELSE
+        TRANSITION FIND IF
+          DUP B@ 080 & IF
+            COMP-DIR
+          ELSE
+            DROP NUMBER IF  LITERAL  ELSE  UNDEFINED  ENDIF
+          ENDIF
+        ELSE
+          NUMBER IF  LITERAL  ELSE  UNDEFINED  ENDIF
+        ENDIF
+      ENDIF
+    ELSE
+      ASSM @ IF  ASSEMBLER  ELSE  TRANSITION  ENDIF
+      FIND IF
+        EXECUTE
+      ELSE
+        NUMBER IF  LITERAL  ELSE  UNDEFINED  ENDIF
+      ENDIF
+    ENDIF  0
+  END ;
+
+: H/D ( u -- )
+  DUP . T" / " DECIMAL . HEX ;
+
+: STATISTICS
+  CR CR CR T" Successful compilation"
+  CR CR T" Program size = " CSAD @ INITDP @ - DUP H/D
+  ROMF @ IF
+    CR T" Variable space used = " TVS @ TVP @ - DUP H/D +
+  ENDIF
+  ?SYMTAB @ IF
+    CR T" Dictionary size = " TSYMTP @ TSYMPTR @ - DUP H/D +
+  ENDIF
+  CR T" Total memory used = " H/D CR CR ;
+
+: WRITEVARS
+  CBFLUSH  TRVP @ 0 DO
+    I TRVS B@ IF
+      I 1+ TRVS @ WWORD I 3 + TRVS @ WWORD
+    ENDIF
+  5 +LOOP ;
+
+: PUTJMP ( -- )
+  MACHINE# 5 = IF  0E9  ELSE  0C3  ENDIF  B,  0 ,
+  ENCODE" 1.2"
+  ENCODE" (C) Copyright 1980 The Stackworks"
+  MACHINE# 0= IF
+    ENCODE" Z80-CP/M"
+  ELSE
+    MACHINE# 1 = IF
+      ENCODE" 8080-CP/M"
+    ELSE
+      MACHINE# 5 = IF
+        ENCODE" 8086-DOS "
+      ENDIF
+    ENDIF
+  ENDIF ;
+
+: FINISHED ( -- )
+  COMFILE FLUSH  WRITEJMP  0 SGEN !  STATISTICS ;
+
+: WRITESYM ( -- )
+  CBFLUSH  UPDATE-SYMTAB
+  TSYMTP @ TSYMPTR @ DO  I B@ WBYTE  LOOP ;
+
+: $FLOAD
+  R> DUP B@ 2DUP + 1+ >R  WLN !  WPTR !
+  INFILE $NAMIT INFILE OPENR SLOOP ;
+
+: FLOAD ( "name" )
+  SGEN @ IF
+    STATE @ IF
+      'C $FLOAD ,  WORD DP @ DUP B@ 1+ DO
+        DUP B@ B, 1+
+      LOOP DROP
+    ELSE
+      INFILE NAMIT INFILE OPENR SLOOP
+    ENDIF
+  ELSE
+    STATE @ IF
+      'B $FLOAD ,  WORD HERE B@ 1+ DP+!
+    ELSE  COMPILE FLOAD  ENDIF
+  ENDIF ;  IMP FLOAD
+
+
+( *** START OF ASSEMBLER CODE *** )
+
+
+
+                        ( 8086 ASSEMBLER )
+
+
+                     ( preliminary release )
+
+
+ASSEMBLER DEFINITIONS    HEX
+
+: BIG? ( n -- flag )  080 -080 OVER - >R - R> U< ;
+
+: REL ( a1 a2 -- offs )
+  1+ - DUP BIG? IF  T" BRANCH OUT OF RANGE" ABORT  ENDIF ;
+
+0800 CONSTANT #   0809 CONSTANT )   0812 CONSTANT []
+
+080 CONSTANT [BX+SI]   089 CONSTANT [BX+DI]
+092 CONSTANT [BP+SI]   09B CONSTANT [BP+DI]
+
+0A4 CONSTANT [SI]      0AD CONSTANT [DI]
+0B6 CONSTANT [BP]      0BF CONSTANT [BX]
+
+: [SI+BX] [BX+SI] ;    : [DI+BX] [BX+DI] ;
+: [SI+BP] [BP+SI] ;    : [DI+BP] [BP+DI] ;
+
+000 CONSTANT AL   009 CONSTANT CL   012 CONSTANT DL   01B CONSTANT BL
+024 CONSTANT AH   02D CONSTANT CH   036 CONSTANT DH   03F CONSTANT BH
+040 CONSTANT AX   049 CONSTANT CX   052 CONSTANT DX   05B CONSTANT BX
+064 CONSTANT SP   06D CONSTANT BP   076 CONSTANT SI   07F CONSTANT DI
+0C0 CONSTANT ES   0C9 CONSTANT CS   0D2 CONSTANT SS   0DB CONSTANT DS
+
+: REG  CONSTANT ;: B@ SWAP 0FFC0 & = MINUS ;
+
+( 000 REG 8? )  040 REG 16?   080 REG M?   0C0 REG S?
+
+-1 VARIABLE SIZ  ( BYTE/WORD FLAG )
+ 0 VARIABLE ISF  ( FAR FLAG )
+
+: !SIZ ( -- ) -1 SIZ ! ;  ( WORD )
+: !SEG ( -- )  0 ISF ! ;  ( FAR OFF )
+
+: RESET ( -- ) !SIZ !SEG ;
+
+: REG? ( n -- flag )  0FFC0 & 80 < ;
+: LOW ( n -- mask )  7 & ;
+: MID ( n -- mask )  038 & ;
+: OP, ( n op -- )  | B, ;
+: W, ( op mr -- )  16? 1 & OP, ;
+: SIZ, ( op -- op' )  SIZ @ 1 & OP, ;
+: ,C, ( n f -- )  IF , ELSE B, ENDIF ;
+: REG, ( mr1 mr2 -- )  MID SWAP LOW | 0C0 OP, ;
+: ESC, ( m -- )  0D8 OP, ;
+
+: MEM, ( disp mr m -- )
+  OVER ) = IF  MID 6 OP, DROP ,
+  ELSE  MID OVER LOW | ROT ROT [BP] = OVER 0= &
+  IF  SWAP 040 OP, B,  ELSE  SWAP OVER BIG?
+  IF  080 OP, ,  ELSE  OVER 0=
+  IF  SWAP DROP  ELSE  040 OP,  ENDIF  B,
+  ENDIF  ENDIF  ENDIF ;
+
+: OW, ( mr op -- mr )  OVER W, ;
+: WM, ( disp mem reg op -- )  OW, MEM, ;
+: RM, ( mr reg -- )  OVER REG? IF  REG,  ELSE  MEM,  ENDIF ;
+
+: WR, ( r/m r op -- )  3 PICK DUP REG?
+  IF  W, REG,  ELSE  DROP SIZ, MEM,  !SIZ  ENDIF ;
+
+: FAR? ( n1 -- n2 )  ISF @ IF  8 |  ENDIF  !SEG ;
+
+: FORM1  CONSTANT ;: @ B, ;
+: FORM2  CONSTANT ;: @ B, 0A B, ;
+: FORM3  CONSTANT ;: @ B, DUP IF  HERE REL  ENDIF  B, ;
+: FORM4  CONSTANT ;: @ B, MEM, ;
+: FORM5  CONSTANT ;: @ SIZ, !SIZ ;
+: FORM7  CONSTANT ;: @ F6 WR, ;
+
+: FORM8  CONSTANT ;: @ >R  DUP REG? IF  DUP DX =
+  IF SWAP ENDIF  ELSE  ROT  ENDIF  16? 1 &  R> |
+  SWAP # = IF  B, B,  ELSE  08 OP,  ENDIF ;
+
+: FORM9  CONSTANT ;: @ OVER 16?
+  IF  040 | SWAP LOW OP,  ELSE  0FE WR,  ENDIF ;
+
+: FORM10  CONSTANT ;: @ OVER CL =
+  IF  SWAP DROP D2  ELSE  OVER 1 = IF SWAP DROP ENDIF  0D0  ENDIF  WR, ;
+
+: FORM11  CONSTANT ;: @ DUP FAR? B,  1 & 0= IF  ,  ENDIF ;
+
+: FORM12  CONSTANT ;:  OVER ) =
+  IF  SWAP DROP  B@  ISF @
+    IF  1 & IF  0EA  ELSE  09A  ENDIF  B,  SWAP , ,  !SEG
+    ELSE  SWAP HERE - 2 - SWAP  2DUP 1 & SWAP BIG? 0= &
+      IF  2 OP, B,  ELSE  B,  1- ,  ENDIF  ENDIF
+  ELSE  OVER [] = IF  SWAP DROP  ) SWAP  ENDIF
+    0FF B, 1+ B@ FAR?  RM,  ENDIF ;
+
+: FORM13  CONSTANT , ;:  OVER REG?
+  IF  B@ SWAP LOW OP,  ELSE  2 + OVER S?
+    IF  B@ LOW SWAP MID OP,
+    ELSE  COUNT SWAP B@ B,  MEM,  ENDIF
+  ENDIF ;
+
+: FORM14  CONSTANT ;:  @ >R
+  DUP REG? IF  OVER REG?
+    IF  R> OW, SWAP REG,  ELSE  OVER DUP M? SWAP ) = |
+    IF  R> 2 | WM,  ELSE  ( #) SWAP DROP DUP LOW 0= ( acc?)
+    IF  R> 4 | OW, 16? ,C,
+    ELSE  OVER BIG?  OVER 16?  2DUP &
+      ROT ROT  1 &  SWAP COM  2 &  |  80 OP,
+      SWAP LOW 0C0 |  R> OP,  ,C,
+    ENDIF  ENDIF  ENDIF
+  ELSE  ( mem)  ROT DUP REG?
+    IF  R> WM,
+    ELSE  ( #) DROP  3 PICK BIG?
+      DUP COM  2 &  080 | SIZ,
+      ROT ROT R> MEM,  SIZ @ & ,C,  !SIZ
+  ENDIF  ENDIF ;
+
+: TEST ( src dst -- )
+  DUP REG? IF  OVER REG?
+    IF  084 OW, SWAP REG,  ELSE  OVER DUP M? SWAP ) = |
+    IF  084 WM,  ELSE  ( #) SWAP DROP DUP LOW 0= ( acc?)
+    IF  0A8 OW,
+    ELSE  0F6 OW,  DUP LOW  0C0 OP,
+    ENDIF  16? ,C,  ENDIF  ENDIF
+  ELSE  ( mem)  ROT DUP REG?
+    IF  084 WM,
+    ELSE  ( #) DROP  0F6 SIZ,  0 MEM,  SIZ @ ,C,  !SIZ  ENDIF
+  ENDIF ;
+
+: MOV ( src dst -- )
+  DUP S? IF  08E B, RM,  ELSE  DUP REG?
+    IF  OVER ) = OVER LOW 0= &
+      IF  0A0 SWAP W, DROP ,  ELSE  OVER S?
+      IF  SWAP 08C B, REG,  ELSE  OVER # =
+      IF  SWAP DROP  DUP 16? SWAP LOW OVER 8 & | 0B0 OP, ,C,
+      ELSE  08A OW, RM,  ENDIF  ENDIF  ENDIF
+    ELSE  ( mem) ROT DUP S?
+      IF  08C B, MEM,  ELSE  DUP # =
+      IF  DROP 0C6 SIZ, 0 MEM,  SIZ @ ,C,  !SIZ
+      ELSE  OVER ) = OVER LOW 0= &
+      IF  0A2 SWAP W, DROP ,  ELSE  088 OW, RM,
+  ENDIF  ENDIF  ENDIF  ENDIF  ENDIF ;
+
+: XCHG ( mr1 mr2 -- )
+  DUP REG? IF  OVER REG?
+    IF  OVER AX = IF SWAP ENDIF  DUP AX =
+    IF  DROP LOW 090 OP,  COMPILE $; ( exit) ENDIF  ENDIF
+  ELSE  ROT  ENDIF  DUP 16? SIZ !  086 WR, ;
+
+: ESC ( src ext-opc -- )  LOW 0D8 OP, RM, ;
+
+: INT ( n -- )  0CD OVER 3 = IF  SWAP DROP 1-  ELSE  B,  ENDIF  B, ;
+
+026 FORM1 ES:     027 FORM1 DAA     02E FORM1 CS:     02F FORM1 DAS
+036 FORM1 SS:     037 FORM1 AAA     03E FORM1 DS:     03F FORM1 AAS
+090 FORM1 NOP     098 FORM1 CBW     099 FORM1 CWD     09B FORM1 WAIT
+09C FORM1 PUSHF   09D FORM1 POPF    09E FORM1 SAHF    09F FORM1 LAHF
+0CE FORM1 INTO    0CF FORM1 IRET    0D7 FORM1 XLAT    0F0 FORM1 LOCK
+0F2 FORM1 REPNZ   0F3 FORM1 REPZ    : REP REPZ ;      0F4 FORM1 HLT
+0F5 FORM1 CMC     0F8 FORM1 CLC     0F9 FORM1 STC     0FA FORM1 CLI
+0FB FORM1 STI     0FC FORM1 CLD     0FD FORM1 STD
+
+0D4 FORM2 AAM     0D5 FORM2 AAD
+
+070 FORM3 JO      071 FORM3 JNO     072 FORM3 JC      072 FORM3 JB
+073 FORM3 JNC     073 FORM3 JNB     074 FORM3 JZ      075 FORM3 JNZ
+076 FORM3 JNA     077 FORM3 JA      078 FORM3 JS      079 FORM3 JNS
+07A FORM3 JPE     07B FORM3 JPO     07C FORM3 JL      07D FORM3 JNL
+07E FORM3 JNG     07F FORM3 JG      0E0 FORM3 LOOPNZ  0E1 FORM3 LOOPZ
+0E2 FORM3 LOOP    0E3 FORM3 JCXZ    0EB FORM3 JU
+
+08D FORM4 LEA     0C4 FORM4 LES     0C5 FORM4 LDS
+
+0A4 FORM5 MOVS    0A6 FORM5 CMPS    0AA FORM5 STOS    0AC FORM5 LODS
+0AE FORM5 SCAS
+
+010 FORM7 NOT     018 FORM7 NEG     020 FORM7 MUL     028 FORM7 IMUL
+030 FORM7 DIV     038 FORM7 IDIV
+
+0E4 FORM8 IN      0E6 FORM8 OUT     000 FORM9 INC     008 FORM9 DEC
+
+000 FORM10 ROL    008 FORM10 ROR    010 FORM10 RCL    018 FORM10 RCR
+020 FORM10 SHL    028 FORM10 SHR    038 FORM10 SAR
+
+0C2 FORM11 +RET   0C3 FORM11 RET    10E8 FORM12 CALL  20E9 FORM12 JMP
+
+08F07 058 FORM13 POP   0FF36 050 FORM13 PUSH
+
+000 FORM14 ADD    008 FORM14 OR     010 FORM14 ADC    018 FORM14 SBB
+020 FORM14 AND    028 FORM14 SUB    030 FORM14 XOR    038 FORM14 CMP
+
+
+: BYTE  0 SIZ ! ;  ( BYTE operation )
+: FAR   1 ISF ! ;  ( FAR operation )
+
+                           ( ALIASES )
+
+: JBE  JNA ;      : JAE  JNB ;        : JE  JZ ;       : JNE  JNZ ;
+: JGE  JNL ;      : JLE  JNG ;        : JP  JPE ;      : JNP  JPO ;
+: LOOPE  LOOPZ ;  : LOOPNE  LOOPNZ ;  : REPE  REPZ ;   : REPNE  REPNZ ;
+: SAL  SHL ;
+
+                    ( ASSEMBLER CONDITIONALS )
+
+070 CONSTANT NO   071 CONSTANT OV     072 CONSTANT U>=
+073 CONSTANT U<   074 CONSTANT 0<>    075 CONSTANT 0=
+076 CONSTANT U>   077 CONSTANT U<=    078 CONSTANT 0>=
+079 CONSTANT 0<   07A CONSTANT PO     07B CONSTANT PE
+07C CONSTANT >=   07D CONSTANT <      07E CONSTANT >
+07F CONSTANT <=   0E3 CONSTANT CXNZ   0EB CONSTANT NEVER
+: NC  U>= ;       : CY  U< ;
+
+
+: BEGIN,   HERE ;
+( : ENDIF,   HERE OVER REL SWAP B! ; )
+: ENDIF,   CBUFP OVER REL SWAP B! ;
+( : IF,      B, BEGIN, 0 B, ; )
+: IF,      B, CBUFP 0 B, ;
+: END,     B, HERE REL B, ;
+: WHILE,   IF, SWAP ;
+: AHEAD,   NEVER IF, ;
+: ELSE,    AHEAD, SWAP ENDIF, ;
+: AGAIN,   NEVER END, ;
+: REPEAT,  AGAIN, ENDIF, ;
+
+
+( *** END OF ASSEMBLER CODE *** )
+
+
+ASSEMBLER DEFINITIONS
+
+: $PUSH ( -- a )
+  SGEN @ IF  'C $$PUSH  ELSE  UNDEFINED  ENDIF ;
+
+: $NEXT   ( -- a ) $PUSH 1+ ;
+
+: EDOC ( -- )
+  SGEN @ IF  0 ASSM !  TCURRENT @ @ TCONTEXT !
+  ELSE  UNDEFINED  ENDIF ;
+
+TRANSITION DEFINITIONS
+
+: CODE  CODE  SGEN @ IF [ ASSEMBLER ] RESET ENDIF ;
+
+: ;CODE
+  COMPILE ;CODE  SGEN @ IF [ ASSEMBLER ] RESET ENDIF ;  IMP ;CODE
+
+: COLDSTART ( -- )
+  TDP @ CSAD !  1 ASSM ! [ ASSEMBLER ] RESET ;
+
+
+: ISYS ( -- )
+  CR SIGN-ON
+  CR T" Enter 'STAT' to examine parameters"
+  CR T" Enter 'RAMGEN' to generate a RAM based system "
+  CR T" Enter 'ROMGEN' to generate a ROM based system "
+  CR CR ;
+
+: STAT ( -- )
+  CR T" All values are shown in hex/decimal form"
+  CR T" Maximum number of variables (VAR-MAX) = " VAR-MAX @ H/D
+  CR T" Temporary symbol table space (TSYMSP) = " TSYMSP @ H/D
+  CR T" Compiler buffer size (CB-SIZE) = " CB-SIZE @ H/D
+  CR T" Starting program address (TDP) = " TDP @ H/D
+  CR CR ;
+
+: RESP ( -- c )
+  CIN 05F & ;
+
+: RAMGEN ( -- )
+  VINIT  1 SGEN !  PUTJMP  VOCABBASE
+  CR T" Enter object file name "
+  SETUP
+  T" Enter Kernel source file name " COMPILE FLOAD
+  BEGIN
+    CR T" More input (Y/N) ? " RESP CR
+    " Y = IF
+      T" Enter source file name " COMPILE FLOAD
+      CR  0
+    ELSE  1  ENDIF
+  END
+  T" Do you want a symbol table (Y/N) ? " RESP CR
+  " Y = IF
+    1 ?SYMTAB !
+  ELSE
+    0 ?SYMTAB !
+  ENDIF
+  0 INFOF !
+  FLOAD COLD.SL5
+  GO-OPSYS ;
+
+: ROMGEN ( -- )
+  CR  BEGIN
+    T" Enter first address in ROM " WORD NUMBER IF
+      TDP !  1
+    ELSE
+      T" Not a valid hex number !! " CR  0
+    ENDIF
+  END
+  BEGIN
+    T" Enter highest RAM address " WORD NUMBER IF
+      1+ TVS !  1
+    ELSE
+      T" Not a valid hex number !! " CR 0
+    ENDIF
+  END  1 ROMF !  RAMGEN ;
+
+: DUMMY ;
+
+: COMUP ( -- )
+  HERE  6 @  SYMTP @ SYMPTR @ -
+  2DUP -  DUP SYMPTR !  ROT SYMTP !  SWAP BMOVE
+  ISYS  'B INTRLP GOQIAD !  RESTART ;
+
+: DOIT ( -- )
+  SYMPTR @  HERE  SYMTP @ SYMPTR @ -  BMOVE
+  'B COMUP  GOQIAD !
+  CR CR  T" TYPE 'SAVE "
+  SYMTP @ SYMPTR @ -  HERE +  0100 /  DECIMAL . HEX
+  T"  SYSMAKE.COM'."
+  0 GO ;
+
+1 UPPER !
+7F INFOF !
+
+DOIT
+
+[END-OF-FILE]
+
+
+

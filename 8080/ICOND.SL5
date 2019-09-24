@@ -1,0 +1,28 @@
+                  ( INTERPRETER CONDITIONALS )
+
+: IFEND ;
+
+: OTHERWISE  'S IFEND   BEGIN
+     WORD FIND IF
+	 OVER = 
+	 ELSE 0
+     ENDIF
+ END DROP ;
+
+: IFTRUE NOT IF
+     'S OTHERWISE   'S IFEND    BEGIN
+	 WORD FIND IF
+	     DUP 4 PICK =     SWAP 3 PICK =    |
+	     ELSE 0
+	 ENDIF
+     END 2DROP
+ ENDIF ;
+
+: IFDEFINED WORD FIND IF
+     DROP 1
+     ELSE 0
+ ENDIF IFTRUE ;
+
+[END-OF-FILE]
+
+

@@ -1,0 +1,35 @@
+     This  is  a short description of the files which  reside  on 
+this  diskette.    Sections of the manual which pertain to  these 
+files are indicated in parenthesis after the description.
+
+
+
+File name                          Description
+=========                          ===========
+
+SL5.COM        The  binary  form of  "KERNEL.SL5"  .   (Tutorial, 
+               Reference, Glossary )
+
+DEBUG.COM      This  is  the same as SL5.COM with  the  debugging 
+               package being present.  (Debug)
+
+ASSEM.COM      The  same as SL5.COM plus the  assembler.  (Assem-
+               bler)
+
+DEV.COM        This  version contains the assembler & the  debug-
+               ging package. (Assembler, Debug)
+
+SYSMAKE.COM    The Target Compiler for RAM and ROM based systems.
+
+KERNEL.SL5     The source code of the kernel.  (Object Modules)
+
+ICOND.SL5      The  source code for the interpreter conditionals.  
+               (Glossary)
+
+DEBUG.SL5      The source code for the debugging package. (Debug)
+
+ASSEM.SL5      The source for the Z80 assembler.  (Assembler)
+
+COMMOD.SL5     The  "COM" module generator source.  (Object  Mod-
+               ules)
+

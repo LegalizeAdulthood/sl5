@@ -1,0 +1,515 @@
+----------------------------------------------------------------
+Original documentation for the SL5 8080 assembler is currently
+unavailable.  As a substitute we have taken the documentation
+from the Z80 SL5 System Reference Manual and modified it to suit
+the 8080 assembler.
+----------------------------------------------------------------
+
+
+                 SL5 8080 ASSEMBLER DOCUMENTATION
+
+
+
+Assembler
+---------
+
+1. Introduction
+---------------
+
+In the previous sections, you were shown how to define a process in terms 
+of other, previously defined processes or words, and this was a "colon 
+definition".  There is another method of defining words in the machine 
+language of the particular processor being used.  This is called a "code 
+definition".  Many of the SL5 primitives (such as SWAP, +, *, etc.) are 
+defined in this manner.
+
+Note: This manual assumes that the reader is familiar with the Intel 8080 
+assembly language.
+
+
+2. Execution of CODE definitions
+--------------------------------
+
+The execution of code definitions is very different from the way in which 
+colon definitions are executed.  The main difference is that the body of 
+the code word is executed directly by the CPU, while colon bodies are 
+interpreted by the inner interpreter.
+
+
+3. Creation of CODE Words
+-------------------------
+
+One of the major differences between CODE words and colon definitions 
+is that the code segment is created through the execution of words which 
+place machine instructions in the code segment while, with colon 
+definitions, addresses are placed in the code segment by the compiler.
+
+        CODE nnnn ... words ... EDOC
+
+        Figure 3-1. Format of CODE definitions
+
+Shown in Figure 3-1 is the format of CODE definitions.  Upon execution 
+of the word CODE, nnnn is added to the dictionary, and CONTEXT is set to 
+the assembler.  The words which follow may place machine instructions in 
+the code segment, which will be executed when "nnnn" is subsequently 
+executed.  The final part of a CODE definition (EDOC) resets the CONTEXT 
+vocabulary to the CURRENT vocabulary, so that the newly-defined word may 
+be used immediately.
+
+
+1. Using the Assembler
+----------------------
+
+During the writing of CODE definitions, the machine instructions which 
+compose the definition can be specified by placing the actual opcodes in 
+the code segment, or by using the SL5 assembler mnemonics.  To place the 
+opcodes in the code segment, the two words , and B, may be used.  The 
+word "," will store a word (16 bits) in the code area, while "B," will 
+store a byte (the low-order 8 bits of a word).
+
+Note: The word "," reverses the bytes before storing them.
+
+        Example: The word "+" could be defined as:
+
+        CODE +  C1 B,  E1 B,  09 B,  C3 B,  $PUSH ,  EDOC
+
+C1, E1, and 09 are the Intel 8080 opcodes which, when executed, will pop 
+the BC and HL registers off of the stack, and add them together.  The 
+"C3 $PUSH" will then jump to the inner interpreter, and push the sum 
+which is in HL onto the stack.  The memory image of the word "+" is shown 
+below.
+
+                +----------------------+
+                | JMP $PUSH (C3 $PUSH) |
+                | DAD B           (09) |
+                | POP H           (E1) |
+ Entry point -->| POP B           (C1) |
+                +----------------------+
+
+Another, more readable, method of assembling opcodes is by using the 
+mnemonic assembler.  To use the mnemonic assembler, you must first load 
+it (the mnemonic assembler occupies approximately 2000 decimal bytes):
+
+        >FLOAD ASSEM.SL5 [RETURN]
+
+You can now define CODE words by using the Intel 8080 mnemonics to specify 
+machine instructions (see Appendix A for further details on the mnemonics).
+
+        Example: The definition of the word "+" can now be written as:
+
+        CODE +  B POP  H POP  B DAD  $PUSH JMP  EDOC
+
+
+2. Exiting from a CODE Word
+---------------------------
+
+After a code definition has finished executing, it needs to return to the 
+control of the calling word.  Since code definitions are normally called 
+from colon definitions, the return must be made to the colon definition, 
+or rather the "inner interpreter" which executes colon definitions.
+
+Returning control to the inner interpreter is normally accomplished by 
+branching to one of the entry points listed in Figure 3-2.
+
+        Entry name      Description
+        ----------      -----------
+        $NEXT           The standard exit from a code word.  The inner 
+                        interpreter (pointer held in register DE) continues 
+                        executing from where it was before.
+
+        $PUSH           Push the register pair HL on the parameter stack, 
+                        and branch to $NEXT.
+
+        $NEXTHL         Same as $NEXT with the exception that register HL
+                        holds the Interpreter Pointer.
+
+        Figure 3-2. Summary of inner interpreter entry points
+
+        Example: The code definition of a word which adds 3 to the value 
+                 on the top of the stack, and pushes the sum, might be 
+                 written:
+
+        CODE 3+
+             H POP   3 B LXI   B DAD
+             H PUSH  $NEXT JMP  EDOC
+
+When the above example is executed, the sum is pushed onto the stack before 
+the inner interpreter is invoked.  The same thing could have been written 
+as:
+
+        CODE 3+
+             H POP   3 B LXI  B DAD
+             $PUSH JMP  EDOC
+
+
+3. Branching Within CODE Definitions
+------------------------------------
+
+There are three assembler constructions which enable you to branch within 
+a CODE word.  In order to use these words, the mnemonic assembler must be 
+present.
+
+
+Forward Branching
+-----------------
+
+In colon definitions, the words IF ELSE and ENDIF composed the forward 
+branching construction.  In  code definitions, the words are IF, ELSE, and 
+ENDIF,.  The difference between the two constructions (outside of the 
+trailing ",") is that the assembler word IF, tests an Intel 8080 condition 
+code (cc) during execution, rather than a Boolean stack value.
+
+        cc IF, ..true part.. {ELSE, ..false part..} ENDIF,
+
+        Figure 3-3. Format of the IF,-ELSE,-ENDIF, conditional
+
+The format for the conditional branch is shown above (the portion enclosed 
+by the "{}" is optional).  The cc part is the condition code (C, NC, Z, NZ, 
+P, MI, PO, or  PE) which, if TRUE ( <>0) at execution time, will cause the 
+machine instructions between the IF, and the ELSE, to be executed.  If cc 
+is not TRUE, the code following the ELSE, (if present) will be executed. 
+In both cases, the code following the ENDIF, is executed.
+
+                +-----------+
+      Address 2 | JMP $PUSH |
+      Address 1 | LXI H,0   |
+                | JMP Addr2 |
+                | LXI H,1   |
+                | JZ Addr1  |
+                | ORA H     |
+                | MOV A,L   |
+ Entry point -->| POP H     |
+                +-----------+
+
+        Figure 3-4. Memory diagram of the word 0<>
+
+        Example:
+
+                 CODE 0<>
+                      H POP  L A MOV  H ORA  NZ IF,
+                              1 H LXI
+                              ELSE, 0 H LXI
+                      ENDIF, $PUSH JMP  EDOC
+
+The memory image of the above example is given in Figure 3-4.  When the 
+word 0<> is executed, the top of the stack is tested for a non-zero value. 
+If it is non-zero, a 1 is loaded into the register pair HL.  If the Top Of 
+Stack is zero, a 0 is loaded into HL.  The inner interpreter entry point 
+$PUSH then places the value of HL on the stack, and drops into $NEXT. 
+Another way of writing the above example would be:
+
+        CODE 0<>
+             H POP  L A MOV  H ORA  NZ IF,
+                     1 H LXI
+             ENDIF, $PUSH JMP  EDOC
+
+In this version, the fact that the register pair HL already contains the 
+FALSE value (=0) if the TOS is zero is taken advantage of.
+
+
+Looping
+-------
+
+There are two types of loop constructions which can be utilized in CODE 
+words.  The first type is the conditional loop, and its format is shown 
+below (Figure 3-5).  The BEGIN,-END, assembler construction is very similar 
+to the BEGIN-END construction  used in colon definitions, with the exception 
+that END, tests a Intel 8080 condition code (cc) rather than a Boolean stack 
+value before looping again.  The code between BEGIN, and END, is executed 
+repeatedly until the Intel 8080 condition code (C, NC, Z, NZ, P, MI, PO, or 
+PE) is TRUE (<>0) when END, is executed.
+
+        BEGIN, ... cc END,
+
+        Figure 3-5. Format of the BEGIN,-END, construct
+
+An example of the conditional loop is shown below, with the memory image 
+of the example given in Figure 3-7.  The contents of reserved register DE
+is saved previous to its use and restored afterwards.
+
+        CODE BMOVE
+             B POP  H POP  XCHG  XTHL  BEGIN,
+             M A MOV  D STAX  H INX
+             D INX  B DCX  B A MOV  C ORA
+             Z END, D POP  $NEXT JMP  EDOC
+
+        Figure 3-6. Example using the BEGIN,-END, conditionals to define 
+        the word BMOVE
+
+                +-----------+
+                | JMP $NEXT |
+                | POP D     |
+                | JZ,Addr1  |
+                | ORA C     |
+                | MOV A,B   |
+                | DCX B     |
+                | INX D     |
+                | INX H     |
+                | STAX D    |
+          Addr1 | MOV A,M   |
+                | XTHL      |
+                | XCHG      |
+                | POP H     |
+ Entry point -->| POP B     |
+                +-----------+
+
+        Figure 3-7. Memory image of the BMOVE example
+
+In  the  example, the code between the BEGIN, and the Z END, is executed 
+repeatedly until the register pair BC becomes zero.  Notice that, if BC 
+is initially zero, the loop is executed 65536 times, instead of not 
+executing at all, which is not what we wanted to do.  To cure this, a 
+pre-test is needed, and this is shown in Figure 3-8.
+
+        CODE BMOVE
+             B POP  H POP  XCHG  XTHL  B A MOV  C ORA
+             NZ IF,
+                   BEGIN,
+                        M A MOV  D STAX  H INX
+                        D INX  B DCX  C A MOV  B ORA
+                   Z END,
+             ENDIF,  D POP  $NEXT JMP  EDOC
+
+        Figure 3-8. The BMOVE example with a pre-test for zero.
+
+The format of the other type of loop, the unconditional loop, is given 
+in Figure 3-9, and an example of its usage is shown in Figure 3-10.
+
+        BEGIN, ... REPEAT,
+
+        Figure 3-9. Format of the unconditional assembler loop
+
+        CODE WAIT
+             B POP  BEGIN,
+                  20 IN  C CMP  Z IF,
+                     $NEXT JMP
+                  ENDIF,
+             REPEAT,  EDOC
+
+        Figure 3-10. Example using BEGIN,-REPEAT,
+
+In the above example, the code between the BEGIN, and the REPEAT, is 
+executed until the data read from port 20 is equal to the TOS upon entry 
+of WAIT.  Notice that no code follows the REPEAT,.  This is because it 
+normally would not be executed.
+
+
+4. Assembler Mnemonics
+----------------------
+
+This section compares the SL5 assembler mnemonics with the Intel/Zilog 
+mnemonics.  Refer to the respective Intel and Zilog programming manuals 
+for more details on the operation and usage of the instruction set.
+
+In the first part of this section, the format of the SL5 mnemonics is 
+discussed and, in the second part,the SL5 mnemonics are listed with 
+their Intel/Zilog counterparts in alphabetic order.
+
+The SL5 mnemonics differ from their Intel/Zilog counterparts as follows:
+
+    (1) Because of the nature of SL5, the operands must precede the 
+        mnemonic.
+
+        Example: The instruction: MVI C,3
+                 is written as:   3 C MVI
+
+    (2) [not applicable to the 8080 assembler]
+
+
+        Figure A-1. Operand differences
+
+
+Notation
+--------
+
+r,r1,r2 -- Any of the 8080 registers {A,B,C,D,E,H,L,(HL)}
+     cc -- Any of the 8080 condition codes {C,NC,Z,NZ,PO,PE,P,M}
+
+      n -- An 8-bit integer
+     nn -- A 16-bit integer
+    adr -- A 16-bit address
+
+The following is an alphabetically-sorted list of assembler mnemonics 
+comparing the Intel and Zilog syntax with the SL5 form.  Duplications 
+(if any) which appear imply that either form shown may be utilized.
+
+        Zilog            Intel           SL5
+        -----            -----           ---
+        ADC  A,(HL)      ADC  M          M  ADC
+        ADC  A,n         ACI  n          n  ACI
+        ADC  A,r         ADC  r          r  ADC
+        ADD  A,(HL)      ADD  M          M  ADD
+        ADD  A,n         ADI  n          n  ADI
+        ADD  A,r         ADD  r          r  ADD
+        ADD  HL,BC       DAD  B          B  DAD
+        ADD  HL,DE       DAD  D          D  DAD
+        ADD  HL,HL       DAD  H          H  DAD
+        ADD  HL,SP       DAD  SP         SP DAD
+        AND  (HL)        ANA  M          M  ANA
+        AND  n           ANI  n          n  ANI
+        AND  r           ANA  r          r  ANA
+        CALL  C,adr      CC   adr        adr  CC
+        CALL  M,adr      CM   adr        adr  CM
+        CALL  NC,adr     CNC  adr        adr  CNC
+        CALL  NZ,adr     CNZ  adr        adr  CNZ
+        CALL  P,adr      CP   adr        adr  CP
+        CALL  PE,adr     CPE  adr        adr  CPE
+        CALL  PO,adr     CPO  adr        adr  CPO
+        CALL  Z,adr      CZ   adr        adr  CZ
+        CALL  adr        CALL adr        adr  CALL
+        CCF              CMC             CMC
+        CP  (HL)         CMP  M          M  CMP
+        CP  n            CPI  n          n  CPI
+        CP  r            CMP  r          r  CMP
+        CPL              CMA             CMA
+        DAA              DAA             DAA
+        DEC  (HL)        DCR  M          M  DCR
+        DEC  BC          DCX  B          B  DCX
+        DEC  DE          DCX  D          D  DCX
+        DEC  HL          DCX  H          H  DCX
+        DEC  SP          DCX  SP         SP DCX
+        DEC  r           DCR  r          r  DCR
+        DI               DI              DI
+        EI               EI              EI
+        EX  (SP),HL      XTHL            XTHL
+        EX  DE,HL        XCHG            XCHG
+        HALT             HLT             HLT
+        IN  A,(n)        IN   n          n  IN
+        INC  (HL)        INR  M          M  INR
+        INC  BC          INX  B          B  INX
+        INC  DE          INX  D          D  INX
+        INC  HL          INX  H          H  INX
+        INC  SP          INX  SP         SP INX
+        INC  r           INR  r          r  INR
+        JP  (HL)         PCHL            PCHL
+        JP  C,adr        JC   adr        adr  JC
+        JP  M,adr        JM   adr        adr  JM
+        JP  NC,adr       JNC  adr        adr  JNC
+        JP  NZ,adr       JNZ  adr        adr  JNZ
+        JP  P,adr        JP   adr        adr  JP
+        JP  PE,adr       JPE  adr        adr  JPE
+        JP  PO,adr       JPO  adr        adr  JPO
+        JP  Z,adr        JZ   adr        adr  JZ
+        JP  adr          JMP  adr        adr  JMP
+        LD  (BC),A       STAX B          B  STAX
+        LD  (DE),A       STAX D          D  STAX
+        LD  (HL),n       MVI  M,n        n  M  MVI
+        LD  (HL),r       MOV  M,r        r  M  MOV
+        LD  (adr),A      STA  adr        adr  STA
+        LD  (adr),HL     SHLD adr        adr  SHLD
+        LD  A,(BC)       LDAX B          B  LDAX
+        LD  A,(DE)       LDAX D          D  LDAX
+        LD  A,(adr)      LDA  adr        adr  LDA
+        LD  BC,nn        LXI  B,nn       nn  B  LXI
+        LD  DE,nn        LXI  D,nn       nn  D  LXI
+        LD  HL,(adr)     LHLD adr        adr  LHLD
+        LD  HL,nn        LXI  H,nn       nn  H  LXI
+        LD  SP,HL        SPHL            SPHL
+        LD  SP,nn        LXI  SP,nn      nn  SP LXI
+        LD  r,(HL)       MOV  M,r        r  M  MOV
+        LD  r,n          MVI  r,n        n  r  MVI
+        LD  r1,r2        MOV  r1,r2      r2 r1 MOV
+        NEG              NEG             NEG
+        NOP              NOP             NOP
+        OR  (HL)         ORA  M          M  ORA
+        OR  n            ORI  n          n  ORI
+        OR  r            ORA  r          r  ORA
+        OUT  (n),A       OUT  n          n  OUT
+        POP  AF          POP  PSW        PSW  POP
+        POP  BC          POP  B          B  POP
+        POP  DE          POP  D          D  POP
+        POP  HL          POP  H          H  POP
+        PUSH  AF         PUSH PSW        PSW  PUSH
+        PUSH  BC         PUSH B          B  PUSH
+        PUSH  DE         PUSH D          D  PUSH
+        PUSH  HL         PUSH H          H  PUSH
+        RET              RET             RET
+        RET  C           RC              RC
+        RET  M           RM              RM
+        RET  NC          RNC             RNC
+        RET  NZ          RNZ             RNZ
+        RET  P           RP              RP
+        RET  PE          RPE             RPE
+        RET  PO          RPO             RPO
+        RET  Z           RZ              RZ
+        RLA              RAL             RAL
+        RRA              RAR             RAR
+        RRCA             RRC             RRC
+        RRD              RRD             RRD
+        RST  0           RST  0          0  RST
+        RST  8h          RST  1          1  RST
+        RST  10h         RST  2          2  RST
+        RST  18h         RST  3          3  RST
+        RST  20h         RST  4          4  RST
+        RST  28h         RST  5          5  RST
+        RST  30h         RST  6          6  RST
+        RST  38h         RST  7          7  RST
+        SBC  A,(HL)      SBB  M          M  SBB
+        SBC  A,n         SBI  n          n  SBI
+        SBC  A,r         SBB  r          r  SBB
+        SCF              STC             STC
+        SUB  (HL)        SUB  M          M  SUB
+        SUB  n           SUI  n          n  SUI
+        SUB  r           SUB  r          r  SUB
+        XOR  (HL)        XRA  M          M  XRA
+        XOR  n           XRI  n          n  XRI
+        XOR  r           XRA  r          r  XRA
+
+
+5. Register Usage
+-----------------
+
+Figure B-1 is a list of the Intel 8080 registers and their usage.  Any 
+register designated as unused may be altered within a code word.  Any 
+register which is reserved may also be used inside a code definition, 
+if its contents is saved upon entry and restored upon exiting from the 
+code word.
+
+        A  -- Unused 8-bit register
+        BC -- Unused 16-bit register pair
+        DE -- Interpreter Pointer (IP)
+        HL -- Unused 16-bit register pair
+        SP -- Parameter stack pointer
+
+        Figure B-1. Register usage
+
+
+6. Examples of CODE Definitions
+-------------------------------
+
+The first example multiplies the Top Of the Stack by 2, and pushes the 
+product on the data stack.  The equivalent colon definition would be:
+: 2* DUMP + ;
+
+        CODE 2*  H POP  H DAD  $PUSH JMP  EDOC
+
+The next example tests the Top Of the Stack, to see if it is negative. 
+If it is negative, the value 1 (TRUE) is returned; otherwise, the value 
+(FALSE) is returned.
+
+        CODE 0<
+             H POP  H A MOV  A ORA  MI IF,
+                     1 H LXI
+                     ELSE,  0 H LXI
+             ENDIF,  $PUSH JMP  EDOC
+
+The  parameter is  popped, its sign bit is then checked and, if it is set 
+(indicating a negative number), a '1' (TRUE) is loaded into the register 
+pair HL; otherwise, a '0' (FALSE) is loaded into HL.  Then, $PUSH is 
+jumped to, which will push HL on the stack and continue.
+
+The final example polls I/O port 40 (decimal) continuously until a non- 
+zero value appears.  Then I/O port 41 (decimal) is read and the data is 
+pushed on the stack.
+
+        CODE IN41
+             BEGIN,
+                  40 IN  A ORA
+             NZ END,  41 IN  A L MOV  0 H MVI
+             $PUSH JMP  EDOC
+
+For more examples of code definitions, examine the definitions of the 
+words (SWAP, +, DUP, etc.) in the kernel.
+
+
+

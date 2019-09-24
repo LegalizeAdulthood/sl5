@@ -1,0 +1,35 @@
+     Thió  ió  á shorô descriptioî oæ thå fileó whicè  residå  oî 
+thió  diskette®    Sectionó oæ thå manuaì whicè pertaiî tï  theså 
+fileó arå indicateä iî parenthesió afteò thå description.
+
+
+
+File name                          Description
+=========                          ===========
+
+SL5.COM        Thå  binarù  forí oæ  "KERNEL.SL5¢  ®   (Tutorial¬ 
+               Reference¬ Glossarù )
+
+DEBUG.COM      Thió  ió  thå samå aó SL5.COÍ witè  thå  debugginç 
+               packagå beinç present®  (Debug)
+
+ASSEM.COM      Thå  samå aó SL5.COÍ pluó thå  assembler®  (Assem
+               bler)
+
+DEV.COM        Thió  versioî containó thå assembleò ¦ thå  debug
+               ginç package® (Assembler¬ Debug)
+
+SYSMAKE.COM    Thå Targeô Compileò foò RAÍ anä ROÍ baseä systems.
+
+KERNEL.SL5     Thå sourcå codå oæ thå kernel®  (Objecô Modules)
+
+ICOND.SL5      Thå  sourcå codå foò thå interpreteò conditionals®  
+               (Glossary)
+
+DEBUG.SL5      Thå sourcå codå foò thå debugginç package® (Debug)
+
+ASSEM.SL5      Thå sourcå foò thå Z8° assembler®  (Assembler)
+
+COMMOD.SL5     Thå  "COM¢ modulå generatoò source®  (Objecô  Mod
+               ules)
+
